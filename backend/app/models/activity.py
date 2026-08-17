@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List
-from sqlalchemy import String, ForeignKey, Table, Column, DateTime
+from sqlalchemy import String, ForeignKey, Table, Column, DateTime, Date
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
@@ -34,6 +34,21 @@ class Activity(Base):
     optimistic_time: Mapped[Optional[float]] = mapped_column(nullable=True)
     most_likely_time: Mapped[Optional[float]] = mapped_column(nullable=True)
     pessimistic_time: Mapped[Optional[float]] = mapped_column(nullable=True)
+    
+    # Gap 2: Crashing / Optimization parameters
+    crash_duration: Mapped[Optional[float]] = mapped_column(nullable=True)
+    normal_cost: Mapped[Optional[float]] = mapped_column(nullable=True)
+    crash_cost: Mapped[Optional[float]] = mapped_column(nullable=True)
+    
+    # Gap 4: Event Domain Metadata
+    category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # e.g., VENUE, CATERING, AUDIO_VISUAL
+    vendor_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    is_milestone: Mapped[bool] = mapped_column(default=False)
+    
+    # Gap 5: Vendor / Resource Availability Constraints
+    vendor_available_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    vendor_available_to: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
         default=datetime.utcnow

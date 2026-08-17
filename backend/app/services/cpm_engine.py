@@ -22,7 +22,10 @@ class ActivityNode:
     ef: float = 0.0
     ls: float = 0.0
     lf: float = 0.0
-    slack: float = 0.0  # slack (or float) = LS - ES
+    slack: float = 0.0  # slack (total float) = LS - ES
+    total_float: float = 0.0
+    free_float: float = 0.0
+    interfering_float: float = 0.0
     is_critical: bool = False
     
     # PERT specific calculations (only stored if computed)
@@ -198,10 +201,24 @@ def run_cpm_passes(
     eps = 1e-9
     for node_id, node in nodes.items():
         node.slack = node.ls - node.es
-        # Clean up negative zeros or extremely small floating numbers
         if abs(node.slack) < eps:
             node.slack = 0.0
+        node.total_float = node.slack
         node.is_critical = abs(node.slack) < eps
+
+        # Calculate Free Float: min(ES of successors) - EF of current node
+        if node.successors:
+            min_succ_es = min(nodes[s_id].es for s_id in node.successors)
+            node.free_float = min_succ_es - node.ef
+        else:
+            node.free_float = node.total_float
+
+        if abs(node.free_float) < eps:
+            node.free_float = 0.0
+
+        node.interfering_float = max(0.0, node.total_float - node.free_float)
+        if abs(node.interfering_float) < eps:
+            node.interfering_float = 0.0
 
     # 4. Construct a sequential critical path from START to END
     # A path is a sequence of zero-slack nodes starting at START and ending at END
@@ -298,3 +315,270 @@ def calculate_pert(
                 probability = 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
 
     return nodes, critical_path, expected_duration, project_variance, probability
+
+
+def crash_project_network(
+    activities: List[Dict],
+    target_duration: Optional[float] = None,
+    max_budget: Optional[float] = None
+) -> Dict:
+    """
+    Gap 2: Crashing Optimization Engine.
+    Iteratively crashes activities on the critical path with the lowest cost per day
+    until target_duration or max_budget is satisfied or no further crashing is possible.
+    """
+    import copy
+
+    # Prepare local copy of activities
+    acts_map = {}
+    baseline_cost = 0.0
+    for act in activities:
+        aid = str(act["id"])
+        norm_dur = float(act.get("duration", 0.0))
+        crash_dur = float(act.get("crash_duration")) if act.get("crash_duration") is not None else norm_dur
+        norm_cost = float(act.get("normal_cost")) if act.get("normal_cost") is not None else 0.0
+        crash_cost = float(act.get("crash_cost")) if act.get("crash_cost") is not None else norm_cost
+        
+        # Ensure crash_dur <= norm_dur
+        crash_dur = min(crash_dur, norm_dur)
+        max_crashable = norm_dur - crash_dur
+        
+        cost_per_day = (crash_cost - norm_cost) / max_crashable if max_crashable > 1e-6 else float("inf")
+        if cost_per_day < 0:
+            cost_per_day = 0.0
+
+        acts_map[aid] = {
+            "id": aid,
+            "name": act["name"],
+            "duration": norm_dur,
+            "original_duration": norm_dur,
+            "crash_duration": crash_dur,
+            "normal_cost": norm_cost,
+            "crash_cost": crash_cost,
+            "cost_per_day": cost_per_day,
+            "days_crashed": 0.0,
+            "predecessor_ids": act.get("predecessor_ids", [])
+        }
+        baseline_cost += norm_cost
+
+    # Baseline CPM
+    initial_acts = [v.copy() for v in acts_map.values()]
+    _, init_cp, orig_duration = calculate_cpm(initial_acts)
+
+    current_duration = orig_duration
+    accumulated_crash_cost = 0.0
+
+    # Iterative Crashing loop (step size = 0.5 or 1.0 day)
+    step = 1.0
+    max_iterations = 500
+    iteration = 0
+
+    while iteration < max_iterations:
+        iteration += 1
+        
+        # Stop condition 1: target duration reached
+        if target_duration is not None and current_duration <= target_duration + 1e-6:
+            break
+
+        # Calculate current CPM
+        curr_acts_list = [
+            {"id": v["id"], "name": v["name"], "duration": v["duration"], "predecessor_ids": v["predecessor_ids"]}
+            for v in acts_map.values()
+        ]
+        _, curr_cp, curr_dur = calculate_cpm(curr_acts_list)
+        current_duration = curr_dur
+
+        if target_duration is not None and current_duration <= target_duration + 1e-6:
+            break
+
+        # Find critical path activities that can be crashed further
+        candidates = []
+        for aid in curr_cp:
+            node = acts_map.get(aid)
+            if node and node["duration"] > node["crash_duration"] + 1e-6 and node["cost_per_day"] < float("inf"):
+                candidates.append(node)
+
+        if not candidates:
+            # No critical activity can be crashed further
+            break
+
+        # Pick candidate with lowest cost per day
+        best_candidate = min(candidates, key=lambda x: x["cost_per_day"])
+        
+        # Determine actual reduction delta for this step
+        possible_reduction = best_candidate["duration"] - best_candidate["crash_duration"]
+        actual_step = min(step, possible_reduction)
+
+        if target_duration is not None:
+            actual_step = min(actual_step, current_duration - target_duration)
+
+        additional_cost = actual_step * best_candidate["cost_per_day"]
+
+        # Stop condition 2: budget exceeded
+        if max_budget is not None and (accumulated_crash_cost + additional_cost) > max_budget + 1e-6:
+            # Try partial step to remaining budget
+            remaining_budget = max_budget - accumulated_crash_cost
+            if remaining_budget > 1e-6 and best_candidate["cost_per_day"] > 0:
+                actual_step = remaining_budget / best_candidate["cost_per_day"]
+                additional_cost = actual_step * best_candidate["cost_per_day"]
+            else:
+                break
+
+        if actual_step <= 1e-6:
+            break
+
+        # Apply crash step
+        best_candidate["duration"] -= actual_step
+        best_candidate["days_crashed"] += actual_step
+        accumulated_crash_cost += additional_cost
+
+    # Final CPM calculation
+    final_acts_list = [
+        {"id": v["id"], "name": v["name"], "duration": v["duration"], "predecessor_ids": v["predecessor_ids"]}
+        for v in acts_map.values()
+    ]
+    _, final_cp, final_duration = calculate_cpm(final_acts_list)
+
+    # Format crashed activities breakdown
+    crashed_details = []
+    for aid, node in acts_map.items():
+        if node["days_crashed"] > 1e-6:
+            crashed_details.append({
+                "activity_id": aid,
+                "activity_name": node["name"],
+                "original_duration": node["original_duration"],
+                "crashed_duration": node["duration"],
+                "days_crashed": round(node["days_crashed"], 2),
+                "cost_per_day": round(node["cost_per_day"], 2),
+                "total_crash_cost": round(node["days_crashed"] * node["cost_per_day"], 2)
+            })
+
+    return {
+        "original_duration": round(orig_duration, 2),
+        "crashed_duration": round(final_duration, 2),
+        "total_days_saved": round(orig_duration - final_duration, 2),
+        "baseline_cost": round(baseline_cost, 2),
+        "additional_crash_cost": round(accumulated_crash_cost, 2),
+        "final_total_cost": round(baseline_cost + accumulated_crash_cost, 2),
+        "crashed_activities": crashed_details,
+        "final_critical_path": final_cp
+    }
+
+
+def run_monte_carlo_simulation(
+    activities: List[Dict],
+    num_simulations: int = 1000,
+    target_time: Optional[float] = None
+) -> Dict:
+    """
+    Gap 3: Probabilistic PERT Monte Carlo Simulation & S-Curve Risk Analysis Engine.
+    Executes random sampling over PERT 3-point estimates to quantify merge-event bias,
+    activity criticality indices, percentiles, and cumulative probability S-curves.
+    """
+    import random
+
+    valid_activities = []
+    for act in activities:
+        opt = float(act["optimistic_time"]) if act.get("optimistic_time") is not None else float(act.get("duration", 1.0))
+        lk = float(act["most_likely_time"]) if act.get("most_likely_time") is not None else opt
+        pes = float(act["pessimistic_time"]) if act.get("pessimistic_time") is not None else lk
+        
+        # Ensure opt <= lk <= pes
+        opt_val = min(opt, lk, pes)
+        pes_val = max(opt, lk, pes)
+        lk_val = lk
+        if not (opt_val <= lk_val <= pes_val):
+            lk_val = opt_val
+
+        valid_activities.append({
+            "id": str(act["id"]),
+            "name": act["name"],
+            "opt": opt_val,
+            "lk": lk_val,
+            "pes": pes_val,
+            "predecessor_ids": act.get("predecessor_ids", [])
+        })
+
+    durations = []
+    critical_counts = {act["id"]: 0 for act in valid_activities}
+
+    for _ in range(num_simulations):
+        sampled_acts = []
+        for act in valid_activities:
+            if abs(act["pes"] - act["opt"]) < 1e-6:
+                sample_dur = act["lk"]
+            else:
+                sample_dur = random.triangular(act["opt"], act["pes"], act["lk"])
+            
+            sampled_acts.append({
+                "id": act["id"],
+                "name": act["name"],
+                "duration": sample_dur,
+                "predecessor_ids": act["predecessor_ids"]
+            })
+        
+        nodes, critical_path, proj_dur = calculate_cpm(sampled_acts)
+        durations.append(proj_dur)
+        for cid in critical_path:
+            if cid in critical_counts:
+                critical_counts[cid] += 1
+
+    durations.sort()
+    n = len(durations)
+
+    mean_dur = sum(durations) / n
+    variance = sum((x - mean_dur) ** 2 for x in durations) / n
+    std_dev = math.sqrt(variance)
+
+    def percentile(p):
+        idx = int(p * (n - 1))
+        return durations[idx]
+
+    p10 = percentile(0.10)
+    p50 = percentile(0.50)
+    p80 = percentile(0.80)
+    p90 = percentile(0.90)
+    p95 = percentile(0.95)
+
+    empirical_prob = None
+    if target_time is not None:
+        on_time_count = sum(1 for d in durations if d <= target_time)
+        empirical_prob = round(on_time_count / n, 4)
+
+    criticality_indices = []
+    for act in valid_activities:
+        pct = round((critical_counts[act["id"]] / n) * 100.0, 2)
+        criticality_indices.append({
+            "activity_id": act["id"],
+            "activity_name": act["name"],
+            "criticality_percentage": pct
+        })
+
+    # Generate 50 representative data points for S-Curve plot
+    step_idx = max(1, n // 50)
+    s_curve = []
+    for i in range(0, n, step_idx):
+        dur = round(durations[i], 2)
+        cum_p = round((i + 1) / n, 4)
+        s_curve.append({"duration": dur, "cumulative_probability": cum_p})
+
+    if s_curve[-1]["duration"] != round(durations[-1], 2):
+        s_curve.append({"duration": round(durations[-1], 2), "cumulative_probability": 1.0})
+
+    return {
+        "num_simulations": n,
+        "mean_duration": round(mean_dur, 2),
+        "std_dev_duration": round(std_dev, 2),
+        "min_duration": round(durations[0], 2),
+        "max_duration": round(durations[-1], 2),
+        "p10": round(p10, 2),
+        "p50": round(p50, 2),
+        "p80": round(p80, 2),
+        "p90": round(p90, 2),
+        "p95": round(p95, 2),
+        "empirical_probability": empirical_prob,
+        "criticality_indices": criticality_indices,
+        "s_curve": s_curve
+    }
+
+

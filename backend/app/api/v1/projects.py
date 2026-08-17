@@ -10,6 +10,9 @@ from app.schemas.project import (
     ProjectWithActivitiesResponse
 )
 from app.schemas.simulation import SimulationRequest, SimulationResponse
+from app.schemas.crashing import ProjectCrashRequest, ProjectCrashResponse
+from app.schemas.monte_carlo import MonteCarloRequest, MonteCarloResponse
+from app.schemas.availability import AvailabilityCheckResponse
 from app.services import project_service
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -65,3 +68,44 @@ def simulate_project_change(
     and returns the recomputed network delta without committing to the database.
     """
     return project_service.simulate_change(db, project_id, request)
+
+@router.post("/{project_id}/crash", response_model=ProjectCrashResponse)
+def crash_project_schedule(
+    project_id: UUID,
+    request: ProjectCrashRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Gap 2: Performs optimal project crashing / duration compression based on cost per day.
+    """
+    return project_service.crash_project(db, project_id, request)
+
+@router.post("/{project_id}/monte-carlo", response_model=MonteCarloResponse)
+def run_monte_carlo_simulation(
+    project_id: UUID,
+    request: MonteCarloRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Gap 3: Monte Carlo PERT simulation & S-Curve risk analysis for quantifying merge-event bias.
+    """
+    return project_service.run_monte_carlo_simulation(db, project_id, request)
+
+@router.post("/template/{template_name}", response_model=ProjectWithActivitiesResponse, status_code=status.HTTP_201_CREATED)
+def create_project_from_template(template_name: str, db: Session = Depends(get_db)):
+    """
+    Gap 4: Instantiate a new project pre-populated with event activities, DAG dependencies,
+    PERT estimates, and vendor categories from an industry template (e.g. WEDDING_STANDARD, TECH_CONFERENCE).
+    """
+    return project_service.create_project_from_template(db, template_name)
+
+@router.get("/{project_id}/availability", response_model=AvailabilityCheckResponse)
+def check_vendor_availability(project_id: UUID, db: Session = Depends(get_db)):
+    """
+    Gap 5: Verification Engine for hybrid resource/vendor availability & overbooking conflicts.
+    """
+    return project_service.check_vendor_availability(db, project_id)
+
+
+
+

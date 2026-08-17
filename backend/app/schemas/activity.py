@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -9,6 +9,21 @@ class ActivityCreate(BaseModel):
     optimistic_time: Optional[float] = Field(None, description="Optimistic time for PERT.")
     most_likely_time: Optional[float] = Field(None, description="Most likely time for PERT.")
     pessimistic_time: Optional[float] = Field(None, description="Pessimistic time for PERT.")
+    
+    # Gap 2 fields
+    crash_duration: Optional[float] = Field(None, description="Minimum compressed duration")
+    normal_cost: Optional[float] = Field(None, description="Cost at normal duration")
+    crash_cost: Optional[float] = Field(None, description="Cost at crash duration")
+    
+    # Gap 4 fields
+    category: Optional[str] = Field(None, description="Activity category, e.g. VENUE, CATERING")
+    vendor_name: Optional[str] = Field(None, description="Vendor or team assigned")
+    is_milestone: bool = Field(False, description="Whether activity is a milestone marker")
+    
+    # Gap 5 fields
+    vendor_available_from: Optional[date] = Field(None, description="Vendor availability start date")
+    vendor_available_to: Optional[date] = Field(None, description="Vendor availability end date")
+
     predecessor_ids: List[UUID] = Field(default_factory=list, description="IDs of activities that this activity depends on.")
 
     @model_validator(mode="after")
@@ -19,7 +34,6 @@ class ActivityCreate(BaseModel):
             if self.duration <= 0:
                 raise ValueError("Duration must be greater than zero.")
         else:
-            # If any PERT estimate is set, all must be set
             if opt is None or lk is None or pes is None:
                 raise ValueError("All three PERT estimates (optimistic, most_likely, pessimistic) must be provided.")
             if opt <= 0 or lk <= 0 or pes <= 0:
@@ -35,6 +49,16 @@ class ActivityUpdate(BaseModel):
     optimistic_time: Optional[float] = None
     most_likely_time: Optional[float] = None
     pessimistic_time: Optional[float] = None
+    
+    crash_duration: Optional[float] = None
+    normal_cost: Optional[float] = None
+    crash_cost: Optional[float] = None
+    category: Optional[str] = None
+    vendor_name: Optional[str] = None
+    is_milestone: Optional[bool] = None
+    vendor_available_from: Optional[date] = None
+    vendor_available_to: Optional[date] = None
+
     predecessor_ids: Optional[List[UUID]] = None
 
     @model_validator(mode="after")
@@ -43,12 +67,10 @@ class ActivityUpdate(BaseModel):
             raise ValueError("Duration must be greater than zero.")
             
         opt, lk, pes = self.optimistic_time, self.most_likely_time, self.pessimistic_time
-        # Check values are positive
         for val, name in [(opt, "optimistic"), (lk, "most_likely"), (pes, "pessimistic")]:
             if val is not None and val <= 0:
                 raise ValueError(f"{name}_time must be greater than zero.")
                 
-        # If all three are provided, check order
         if opt is not None and lk is not None and pes is not None:
             if not (opt <= lk <= pes):
                 raise ValueError("PERT estimates must follow: optimistic <= most_likely <= pessimistic")
@@ -63,7 +85,18 @@ class ActivityResponse(BaseModel):
     optimistic_time: Optional[float] = None
     most_likely_time: Optional[float] = None
     pessimistic_time: Optional[float] = None
+    
+    crash_duration: Optional[float] = None
+    normal_cost: Optional[float] = None
+    crash_cost: Optional[float] = None
+    category: Optional[str] = None
+    vendor_name: Optional[str] = None
+    is_milestone: bool = False
+    vendor_available_from: Optional[date] = None
+    vendor_available_to: Optional[date] = None
+
     created_at: datetime
     predecessor_ids: List[UUID] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+

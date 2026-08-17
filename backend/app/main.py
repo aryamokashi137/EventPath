@@ -2,6 +2,11 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from app.api.v1 import api_router
 from app.services.cpm_engine import CycleDetectedError
+from app.db.session import engine
+from app.db.base import Base
+
+# Ensure all tables are created
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="EventPath Scheduling Engine API",

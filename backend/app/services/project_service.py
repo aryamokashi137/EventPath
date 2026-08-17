@@ -8,6 +8,8 @@ from app.models.activity import Activity
 from app.schemas.project import ProjectCreate, ProjectUpdate
 from app.schemas.activity import ActivityCreate, ActivityUpdate
 from app.schemas.simulation import SimulationRequest, SimulationResponse
+from app.schemas.crashing import ProjectCrashRequest, ProjectCrashResponse
+from app.schemas.monte_carlo import MonteCarloRequest, MonteCarloResponse
 from app.services import cpm_engine
 
 def get_project_or_404(db: Session, project_id: UUID) -> Project:
@@ -100,6 +102,14 @@ def create_activity(db: Session, project_id: UUID, activity_in: ActivityCreate) 
         optimistic_time=activity_in.optimistic_time,
         most_likely_time=activity_in.most_likely_time,
         pessimistic_time=activity_in.pessimistic_time,
+        crash_duration=activity_in.crash_duration,
+        normal_cost=activity_in.normal_cost,
+        crash_cost=activity_in.crash_cost,
+        category=activity_in.category,
+        vendor_name=activity_in.vendor_name,
+        is_milestone=activity_in.is_milestone,
+        vendor_available_from=activity_in.vendor_available_from,
+        vendor_available_to=activity_in.vendor_available_to,
         predecessors=predecessors
     )
     db.add(activity)
@@ -234,6 +244,9 @@ def compute_network(db: Session, project_id: UUID) -> Dict:
             "ls": node.ls,
             "lf": node.lf,
             "slack": node.slack,
+            "total_float": node.total_float,
+            "free_float": node.free_float,
+            "interfering_float": node.interfering_float,
             "is_critical": node.is_critical
         })
 
@@ -372,6 +385,222 @@ def _prepare_cpm_input_from_db(db: Session, project_id: UUID) -> List[Dict]:
             "optimistic_time": act.optimistic_time,
             "most_likely_time": act.most_likely_time,
             "pessimistic_time": act.pessimistic_time,
+            "crash_duration": act.crash_duration,
+            "normal_cost": act.normal_cost,
+            "crash_cost": act.crash_cost,
+            "category": act.category,
+            "vendor_name": act.vendor_name,
+            "is_milestone": act.is_milestone,
+            "vendor_available_from": act.vendor_available_from,
+            "vendor_available_to": act.vendor_available_to,
             "predecessor_ids": [str(pred.id) for pred in act.predecessors]
         })
     return activities_data
+
+
+def crash_project(db: Session, project_id: UUID, request: ProjectCrashRequest) -> Dict:
+    """Gap 2: Service function to execute schedule crashing optimization."""
+    project = get_project_or_404(db, project_id)
+    activities_data = _prepare_cpm_input_from_db(db, project_id)
+    
+    result = cpm_engine.crash_project_network(
+        activities_data,
+        target_duration=request.target_duration,
+        max_budget=request.max_budget
+    )
+    return result
+
+
+def run_monte_carlo_simulation(db: Session, project_id: UUID, request: MonteCarloRequest) -> Dict:
+    """Gap 3: Service function for Monte Carlo PERT simulation & S-Curve risk analysis."""
+    project = get_project_or_404(db, project_id)
+    activities_data = _prepare_cpm_input_from_db(db, project_id)
+
+    target_time = request.target_time
+    if target_time is None and project.target_completion_date is not None and project.created_at is not None:
+        start_date = project.created_at.date()
+        target_time = float((project.target_completion_date - start_date).days)
+
+    return cpm_engine.run_monte_carlo_simulation(
+        activities_data,
+        num_simulations=request.num_simulations,
+        target_time=target_time
+    )
+
+
+def create_project_from_template(db: Session, template_name: str) -> Project:
+    """Gap 4: Instantiates a full project populated with event activities from pre-built domain templates."""
+    from app.services.event_templates import EVENT_TEMPLATES
+    
+    t_name = template_name.upper()
+    if t_name not in EVENT_TEMPLATES:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Template '{template_name}' not found. Available templates: {list(EVENT_TEMPLATES.keys())}"
+        )
+
+    t_data = EVENT_TEMPLATES[t_name]
+
+    project = Project(
+        name=t_data["name"],
+        description=t_data["description"],
+        category=t_data["category"],
+        mode=t_data["mode"],
+        start_date=date.today()
+    )
+    db.add(project)
+    db.flush()
+
+    created_activities: Dict[str, Activity] = {}
+    
+    for act_spec in t_data["activities"]:
+        dur = act_spec.get("duration")
+        if dur is None:
+            dur = (act_spec["optimistic"] + 4 * act_spec["most_likely"] + act_spec["pessimistic"]) / 6.0
+
+        activity = Activity(
+            project_id=project.id,
+            name=act_spec["name"],
+            duration=dur,
+            optimistic_time=act_spec.get("optimistic"),
+            most_likely_time=act_spec.get("most_likely"),
+            pessimistic_time=act_spec.get("pessimistic"),
+            crash_duration=act_spec.get("crash_dur"),
+            normal_cost=act_spec.get("normal_cost"),
+            crash_cost=act_spec.get("crash_cost"),
+            category=act_spec.get("category"),
+            vendor_name=act_spec.get("vendor_name"),
+            is_milestone=act_spec.get("is_milestone", False)
+        )
+        db.add(activity)
+        db.flush()
+        created_activities[act_spec["temp_key"]] = activity
+
+    for act_spec in t_data["activities"]:
+        act_obj = created_activities[act_spec["temp_key"]]
+        preds = []
+        for p_key in act_spec.get("preds", []):
+            if p_key in created_activities:
+                preds.append(created_activities[p_key])
+        act_obj.predecessors = preds
+
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+def check_vendor_availability(db: Session, project_id: UUID) -> Dict:
+    """Gap 5: Verification Engine for hybrid resource/vendor availability & overbooking conflicts."""
+    from datetime import timedelta, date
+    project = get_project_or_404(db, project_id)
+    activities_data = _prepare_cpm_input_from_db(db, project_id)
+
+    proj_start = project.start_date or (project.created_at.date() if project.created_at else date.today())
+
+    if project.mode == "CPM":
+        nodes, _, _ = cpm_engine.calculate_cpm(activities_data)
+    else:
+        nodes, _, _, _, _ = cpm_engine.calculate_pert(activities_data)
+
+    activities_db = db.query(Activity).filter(Activity.project_id == project_id).all()
+    act_map = {str(a.id): a for a in activities_db}
+
+    conflicts = []
+
+    node_schedules = {}
+    for nid, node in nodes.items():
+        if nid in ("START", "END"):
+            continue
+        sch_start = proj_start + timedelta(days=int(node.es))
+        sch_finish = proj_start + timedelta(days=int(node.ef))
+        node_schedules[nid] = {
+            "node": node,
+            "act_db": act_map.get(nid),
+            "start": sch_start,
+            "finish": sch_finish
+        }
+
+    for nid, item in node_schedules.items():
+        act = item["act_db"]
+        node = item["node"]
+        sch_s = item["start"]
+        sch_f = item["finish"]
+
+        if act and act.vendor_name:
+            v_from = act.vendor_available_from
+            v_to = act.vendor_available_to
+
+            is_violation = False
+            rec = ""
+
+            if v_from and sch_s < v_from:
+                is_violation = True
+                days_early = (v_from - sch_s).days
+                if node.slack >= days_early:
+                    rec = f"Activity starts {days_early} days before vendor is available. Consume {days_early} days of float (slack = {node.slack}d) to delay start."
+                else:
+                    rec = f"Activity starts {days_early} days before vendor is available, exceeding total float ({node.slack}d)."
+            
+            if v_to and sch_f > v_to:
+                is_violation = True
+                days_late = (sch_f - v_to).days
+                rec = f"Activity finishes {days_late} days after vendor availability ends. Crash schedule or adjust window."
+
+            if is_violation:
+                conflicts.append({
+                    "conflict_type": "VENDOR_AVAILABILITY_VIOLATION",
+                    "activity_id": act.id,
+                    "activity_name": act.name,
+                    "vendor_name": act.vendor_name,
+                    "scheduled_start": sch_s,
+                    "scheduled_finish": sch_f,
+                    "available_from": v_from,
+                    "available_to": v_to,
+                    "conflicting_activity_id": None,
+                    "conflicting_activity_name": None,
+                    "total_float": node.slack,
+                    "resolution_recommendation": rec
+                })
+
+    vendor_groups = {}
+    for nid, item in node_schedules.items():
+        vname = item["act_db"].vendor_name if item["act_db"] else None
+        if vname:
+            vendor_groups.setdefault(vname, []).append(item)
+
+    for vname, group in vendor_groups.items():
+        if len(group) < 2:
+            continue
+        for i in range(len(group)):
+            for j in range(i + 1, len(group)):
+                a1, a2 = group[i], group[j]
+                overlap_start = max(a1["start"], a2["start"])
+                overlap_finish = min(a1["finish"], a2["finish"])
+
+                if overlap_start < overlap_finish:
+                    conflicts.append({
+                        "conflict_type": "VENDOR_OVERBOOKING",
+                        "activity_id": a1["act_db"].id,
+                        "activity_name": a1["act_db"].name,
+                        "vendor_name": vname,
+                        "scheduled_start": a1["start"],
+                        "scheduled_finish": a1["finish"],
+                        "available_from": a1["act_db"].vendor_available_from,
+                        "available_to": a1["act_db"].vendor_available_to,
+                        "conflicting_activity_id": a2["act_db"].id,
+                        "conflicting_activity_name": a2["act_db"].name,
+                        "total_float": a1["node"].slack,
+                        "resolution_recommendation": f"Vendor '{vname}' is double-booked for '{a1['act_db'].name}' and '{a2['act_db'].name}' between {overlap_start} and {overlap_finish}."
+                    })
+
+    return {
+        "project_id": project.id,
+        "project_start_date": proj_start,
+        "has_conflicts": len(conflicts) > 0,
+        "total_conflicts": len(conflicts),
+        "conflicts": conflicts
+    }
+
+
+
+
