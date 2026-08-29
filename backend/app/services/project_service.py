@@ -1,8 +1,10 @@
 from uuid import UUID
 from datetime import date
 from typing import List, Dict, Tuple, Optional, Set
+
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
+
 from app.models.project import Project
 from app.models.activity import Activity
 from app.schemas.project import ProjectCreate, ProjectUpdate
@@ -12,22 +14,33 @@ from app.schemas.crashing import ProjectCrashRequest, ProjectCrashResponse
 from app.schemas.monte_carlo import MonteCarloRequest, MonteCarloResponse
 from app.services import cpm_engine
 
+
 def get_project_or_404(db: Session, project_id: UUID) -> Project:
     project = db.query(Project).filter(Project.id == project_id).first()
+
     if not project:
         raise HTTPException(
-            status_code=status.HTTP_404_RESOURCE_NOT_FOUND if hasattr(status, "HTTP_404_RESOURCE_NOT_FOUND") else 404,
+            status_code=404,
             detail=f"Project with ID {project_id} not found."
         )
+
     return project
+
+
+def get_projects(db: Session) -> List[Project]:
+    """Return all projects."""
+    return db.query(Project).order_by(Project.created_at.desc()).all()
+
 
 def get_activity_or_404(db: Session, activity_id: UUID) -> Activity:
     activity = db.query(Activity).filter(Activity.id == activity_id).first()
+
     if not activity:
         raise HTTPException(
             status_code=404,
             detail=f"Activity with ID {activity_id} not found."
         )
+
     return activity
 
 def create_project(db: Session, project_in: ProjectCreate) -> Project:
@@ -35,6 +48,8 @@ def create_project(db: Session, project_in: ProjectCreate) -> Project:
         name=project_in.name,
         description=project_in.description,
         target_completion_date=project_in.target_completion_date,
+        start_date=project_in.start_date,
+        category=project_in.category,
         mode=project_in.mode.value
     )
     db.add(project)
@@ -285,15 +300,19 @@ def compute_pert_analysis(db: Session, project_id: UUID) -> Dict:
         start_date = project.created_at.date()
         target_time = float((project.target_completion_date - start_date).days)
 
+        available_time = target_time
+
     nodes, critical_path, expected_duration, variance, probability = cpm_engine.calculate_pert(
         activities_data, target_time=target_time
     )
 
     return {
-        "expected_project_duration": expected_duration,
-        "project_variance": variance,
-        "probability": probability
-    }
+    "expected_project_duration": expected_duration,
+    "project_variance": variance,
+    "probability": probability,
+    "available_time": available_time,
+    "target_completion_date": project.target_completion_date
+}
 
 def simulate_change(db: Session, project_id: UUID, request: SimulationRequest) -> Dict:
     project = get_project_or_404(db, project_id)

@@ -325,25 +325,66 @@ def crash_project_network(
     """
     Gap 2: Crashing Optimization Engine.
     Iteratively crashes activities on the critical path with the lowest cost per day
-    until target_duration or max_budget is satisfied or no further crashing is possible.
+    until target duration or max budget is satisfied or no further crashing is possible.
     """
-    import copy
 
-    # Prepare local copy of activities
     acts_map = {}
     baseline_cost = 0.0
+
     for act in activities:
         aid = str(act["id"])
-        norm_dur = float(act.get("duration", 0.0))
-        crash_dur = float(act.get("crash_duration")) if act.get("crash_duration") is not None else norm_dur
-        norm_cost = float(act.get("normal_cost")) if act.get("normal_cost") is not None else 0.0
-        crash_cost = float(act.get("crash_cost")) if act.get("crash_cost") is not None else norm_cost
-        
-        # Ensure crash_dur <= norm_dur
-        crash_dur = min(crash_dur, norm_dur)
+
+        # Use stored duration when available.
+        # For PERT projects, duration may be 0, so calculate
+        # the PERT expected duration.
+        norm_dur = float(act.get("duration") or 0.0)
+
+        if norm_dur <= 0:
+            opt = act.get("optimistic_time")
+            most_likely = act.get("most_likely_time")
+            pess = act.get("pessimistic_time")
+
+            if (
+                opt is not None
+                and most_likely is not None
+                and pess is not None
+            ):
+                norm_dur = (
+                    float(opt)
+                    + 4 * float(most_likely)
+                    + float(pess)
+                ) / 6.0
+
+        crash_dur_value = act.get("crash_duration")
+
+        if crash_dur_value is not None:
+            crash_dur = min(
+                float(crash_dur_value),
+                norm_dur
+            )
+        else:
+            crash_dur = norm_dur
+
+        norm_cost = (
+            float(act.get("normal_cost"))
+            if act.get("normal_cost") is not None
+            else 0.0
+        )
+
+        crash_cost = (
+            float(act.get("crash_cost"))
+            if act.get("crash_cost") is not None
+            else norm_cost
+        )
+
         max_crashable = norm_dur - crash_dur
-        
-        cost_per_day = (crash_cost - norm_cost) / max_crashable if max_crashable > 1e-6 else float("inf")
+
+        cost_per_day = (
+            (crash_cost - norm_cost) / max_crashable
+            if max_crashable > 1e-6
+            else float("inf")
+        )
+
         if cost_per_day < 0:
             cost_per_day = 0.0
 
@@ -359,6 +400,7 @@ def crash_project_network(
             "days_crashed": 0.0,
             "predecessor_ids": act.get("predecessor_ids", [])
         }
+
         baseline_cost += norm_cost
 
     # Baseline CPM
@@ -368,79 +410,125 @@ def crash_project_network(
     current_duration = orig_duration
     accumulated_crash_cost = 0.0
 
-    # Iterative Crashing loop (step size = 0.5 or 1.0 day)
+    # Iterative crashing loop
     step = 1.0
     max_iterations = 500
     iteration = 0
 
     while iteration < max_iterations:
         iteration += 1
-        
-        # Stop condition 1: target duration reached
-        if target_duration is not None and current_duration <= target_duration + 1e-6:
+
+        if (
+            target_duration is not None
+            and current_duration <= target_duration + 1e-6
+        ):
             break
 
-        # Calculate current CPM
         curr_acts_list = [
-            {"id": v["id"], "name": v["name"], "duration": v["duration"], "predecessor_ids": v["predecessor_ids"]}
+            {
+                "id": v["id"],
+                "name": v["name"],
+                "duration": v["duration"],
+                "predecessor_ids": v["predecessor_ids"]
+            }
             for v in acts_map.values()
         ]
+
         _, curr_cp, curr_dur = calculate_cpm(curr_acts_list)
         current_duration = curr_dur
 
-        if target_duration is not None and current_duration <= target_duration + 1e-6:
+        if (
+            target_duration is not None
+            and current_duration <= target_duration + 1e-6
+        ):
             break
 
-        # Find critical path activities that can be crashed further
         candidates = []
+
         for aid in curr_cp:
             node = acts_map.get(aid)
-            if node and node["duration"] > node["crash_duration"] + 1e-6 and node["cost_per_day"] < float("inf"):
+
+            if (
+                node
+                and node["duration"] > node["crash_duration"] + 1e-6
+                and node["cost_per_day"] < float("inf")
+            ):
                 candidates.append(node)
 
         if not candidates:
-            # No critical activity can be crashed further
             break
 
-        # Pick candidate with lowest cost per day
-        best_candidate = min(candidates, key=lambda x: x["cost_per_day"])
-        
-        # Determine actual reduction delta for this step
-        possible_reduction = best_candidate["duration"] - best_candidate["crash_duration"]
+        best_candidate = min(
+            candidates,
+            key=lambda x: x["cost_per_day"]
+        )
+
+        possible_reduction = (
+            best_candidate["duration"]
+            - best_candidate["crash_duration"]
+        )
+
         actual_step = min(step, possible_reduction)
 
         if target_duration is not None:
-            actual_step = min(actual_step, current_duration - target_duration)
+            actual_step = min(
+                actual_step,
+                current_duration - target_duration
+            )
 
-        additional_cost = actual_step * best_candidate["cost_per_day"]
+        additional_cost = (
+            actual_step
+            * best_candidate["cost_per_day"]
+        )
 
-        # Stop condition 2: budget exceeded
-        if max_budget is not None and (accumulated_crash_cost + additional_cost) > max_budget + 1e-6:
-            # Try partial step to remaining budget
-            remaining_budget = max_budget - accumulated_crash_cost
-            if remaining_budget > 1e-6 and best_candidate["cost_per_day"] > 0:
-                actual_step = remaining_budget / best_candidate["cost_per_day"]
-                additional_cost = actual_step * best_candidate["cost_per_day"]
+        if (
+            max_budget is not None
+            and accumulated_crash_cost + additional_cost
+            > max_budget + 1e-6
+        ):
+            remaining_budget = (
+                max_budget - accumulated_crash_cost
+            )
+
+            if (
+                remaining_budget > 1e-6
+                and best_candidate["cost_per_day"] > 0
+            ):
+                actual_step = min(
+                    remaining_budget
+                    / best_candidate["cost_per_day"],
+                    possible_reduction
+                )
+
+                additional_cost = (
+                    actual_step
+                    * best_candidate["cost_per_day"]
+                )
             else:
                 break
 
         if actual_step <= 1e-6:
             break
 
-        # Apply crash step
         best_candidate["duration"] -= actual_step
         best_candidate["days_crashed"] += actual_step
         accumulated_crash_cost += additional_cost
 
-    # Final CPM calculation
+    # Final CPM
     final_acts_list = [
-        {"id": v["id"], "name": v["name"], "duration": v["duration"], "predecessor_ids": v["predecessor_ids"]}
+        {
+            "id": v["id"],
+            "name": v["name"],
+            "duration": v["duration"],
+            "predecessor_ids": v["predecessor_ids"]
+        }
         for v in acts_map.values()
     ]
+
     _, final_cp, final_duration = calculate_cpm(final_acts_list)
 
-    # Format crashed activities breakdown
     crashed_details = []
+
     for aid, node in acts_map.items():
         if node["days_crashed"] > 1e-6:
             crashed_details.append({
@@ -450,16 +538,28 @@ def crash_project_network(
                 "crashed_duration": node["duration"],
                 "days_crashed": round(node["days_crashed"], 2),
                 "cost_per_day": round(node["cost_per_day"], 2),
-                "total_crash_cost": round(node["days_crashed"] * node["cost_per_day"], 2)
+                "total_crash_cost": round(
+                    node["days_crashed"]
+                    * node["cost_per_day"],
+                    2
+                )
             })
 
     return {
         "original_duration": round(orig_duration, 2),
         "crashed_duration": round(final_duration, 2),
-        "total_days_saved": round(orig_duration - final_duration, 2),
+        "total_days_saved": round(
+            orig_duration - final_duration,
+            2
+        ),
         "baseline_cost": round(baseline_cost, 2),
-        "additional_crash_cost": round(accumulated_crash_cost, 2),
-        "final_total_cost": round(baseline_cost + accumulated_crash_cost, 2),
+        "additional_crash_cost": round(
+            accumulated_crash_cost, 2
+        ),
+        "final_total_cost": round(
+            baseline_cost + accumulated_crash_cost,
+            2
+        ),
         "crashed_activities": crashed_details,
         "final_critical_path": final_cp
     }
