@@ -587,3 +587,44 @@
     padding: 19px;
   }
 }
+
+.project-card-actions {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  margin-top: auto;
+}
+
+.project-card-actions .project-open-button {
+  flex: 1;
+}
+
+.project-delete-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.project-delete-button:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+.project-delete-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

@@ -8,10 +8,15 @@ import {
   Plus,
   Search,
   Target,
+  Trash2,
   X,
 } from "lucide-react";
 
-import { createProject, getProjects } from "../services/projectService";
+import {
+  createProject,
+  deleteProject,
+  getProjects,
+} from "../services/projectService";
 
 import "./Projects.css";
 
@@ -33,8 +38,9 @@ function Projects() {
   });
 
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState("");
+const [creating, setCreating] = useState(false);
+const [deleting, setDeleting] = useState(null);
+const [error, setError] = useState("");
 
   const loadProjects = async () => {
     try {
@@ -92,6 +98,7 @@ function Projects() {
       setCreating(true);
       setError("");
 
+
       const project = await createProject({
         name: form.name.trim(),
         description:
@@ -125,6 +132,37 @@ function Projects() {
       );
     } finally {
       setCreating(false);
+    }
+  };
+
+    const handleDeleteProject = async (project) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${project.name}"?\n\n` +
+        "This will also delete all activities associated with this project."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeleting(project.id);
+      setError("");
+
+      await deleteProject(project.id);
+
+      setProjects((current) =>
+        current.filter((item) => item.id !== project.id)
+      );
+    } catch (err) {
+      console.error("Error deleting project:", err);
+
+      setError(
+        err.response?.data?.detail ||
+          "Failed to delete project."
+      );
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -352,17 +390,28 @@ function Projects() {
                   </span>
                 </div>
 
-                <button
-                  className="project-open-button"
-                  onClick={() =>
-                    navigate(
-                      `/projects/${project.id}`
-                    )
-                  }
-                >
-                  Open Workspace
-                  <ArrowRight size={16} />
-                </button>
+              <div className="project-card-actions">
+  <button
+    className="project-open-button"
+    onClick={() =>
+      navigate(`/projects/${project.id}`)
+    }
+  >
+    Open Workspace
+    <ArrowRight size={16} />
+  </button>
+
+  <button
+    className="project-delete-button"
+    onClick={() => handleDeleteProject(project)}
+    disabled={deleting === project.id}
+    aria-label={`Delete ${project.name}`}
+    title="Delete project"
+  >
+    <Trash2 size={17} />
+    {deleting === project.id ? "Deleting..." : "Delete"}
+  </button>
+</div>
               </article>
             ))}
           </div>
