@@ -7,4 +7,11 @@ const api = axios.create({
   },
 });
 
+// Intercept all outgoing HTTP requests to append the active user role header
+api.interceptors.request.use((config) => {
+  const role = localStorage.getItem("eventpath_user_role") || "ADMIN";
+  config.headers["X-User-Role"] = role;
+  return config;
+});
+
 export default api;

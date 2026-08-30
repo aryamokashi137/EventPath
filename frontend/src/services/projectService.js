@@ -76,3 +76,17 @@ export const runMonteCarlo = async (
   );
   return response.data;
 };
+
+export const createProjectFromTemplate = async (templateName) => {
+  const response = await api.post(
+    `/projects/template/${templateName}`
+  );
+  return response.data;
+};
+
+export const checkVendorAvailability = async (projectId) => {
+  const response = await api.get(
+    `/projects/${projectId}/availability`
+  );
+  return response.data;
+};

@@ -294,12 +294,10 @@ def compute_pert_analysis(db: Session, project_id: UUID) -> Dict:
     activities_data = _prepare_cpm_input_from_db(db, project_id)
     
     target_time = None
+    available_time = None
     if project.target_completion_date is not None:
-        # Calculate target time as difference in days between target completion and project created_at
-        # Use datetime.date() to ensure comparison is between date objects
         start_date = project.created_at.date()
         target_time = float((project.target_completion_date - start_date).days)
-
         available_time = target_time
 
     nodes, critical_path, expected_duration, variance, probability = cpm_engine.calculate_pert(
@@ -307,12 +305,12 @@ def compute_pert_analysis(db: Session, project_id: UUID) -> Dict:
     )
 
     return {
-    "expected_project_duration": expected_duration,
-    "project_variance": variance,
-    "probability": probability,
-    "available_time": available_time,
-    "target_completion_date": project.target_completion_date
-}
+        "expected_project_duration": expected_duration,
+        "project_variance": variance,
+        "probability": probability,
+        "available_time": available_time,
+        "target_completion_date": project.target_completion_date
+    }
 
 def simulate_change(db: Session, project_id: UUID, request: SimulationRequest) -> Dict:
     project = get_project_or_404(db, project_id)
@@ -344,7 +342,6 @@ def simulate_change(db: Session, project_id: UUID, request: SimulationRequest) -
             if request.pessimistic_time is not None:
                 act["pessimistic_time"] = request.pessimistic_time
             if request.predecessor_ids is not None:
-                # Convert list of UUIDs to list of strings
                 act["predecessor_ids"] = [str(pid) for pid in request.predecessor_ids]
             break
 
@@ -380,7 +377,6 @@ def simulate_change(db: Session, project_id: UUID, request: SimulationRequest) -
 
     new_critical_set = set(new_critical)
 
-    # Calculate flipped lists
     flipped_to_critical = list(new_critical_set - baseline_critical_set)
     flipped_to_non_critical = list(baseline_critical_set - new_critical_set)
 
@@ -418,7 +414,6 @@ def _prepare_cpm_input_from_db(db: Session, project_id: UUID) -> List[Dict]:
 
 
 def crash_project(db: Session, project_id: UUID, request: ProjectCrashRequest) -> Dict:
-    """Gap 2: Service function to execute schedule crashing optimization."""
     project = get_project_or_404(db, project_id)
     activities_data = _prepare_cpm_input_from_db(db, project_id)
     
@@ -431,7 +426,6 @@ def crash_project(db: Session, project_id: UUID, request: ProjectCrashRequest) -
 
 
 def run_monte_carlo_simulation(db: Session, project_id: UUID, request: MonteCarloRequest) -> Dict:
-    """Gap 3: Service function for Monte Carlo PERT simulation & S-Curve risk analysis."""
     project = get_project_or_404(db, project_id)
     activities_data = _prepare_cpm_input_from_db(db, project_id)
 
@@ -448,7 +442,6 @@ def run_monte_carlo_simulation(db: Session, project_id: UUID, request: MonteCarl
 
 
 def create_project_from_template(db: Session, template_name: str) -> Project:
-    """Gap 4: Instantiates a full project populated with event activities from pre-built domain templates."""
     from app.services.event_templates import EVENT_TEMPLATES
     
     t_name = template_name.upper()
@@ -509,7 +502,6 @@ def create_project_from_template(db: Session, template_name: str) -> Project:
 
 
 def check_vendor_availability(db: Session, project_id: UUID) -> Dict:
-    """Gap 5: Verification Engine for hybrid resource/vendor availability & overbooking conflicts."""
     from datetime import timedelta, date
     project = get_project_or_404(db, project_id)
     activities_data = _prepare_cpm_input_from_db(db, project_id)
@@ -621,5 +613,8 @@ def check_vendor_availability(db: Session, project_id: UUID) -> Dict:
     }
 
 
-
-
+# Function aliases for API router compatibility
+simulate_project = simulate_change
+run_monte_carlo = run_monte_carlo_simulation
+get_project_network = compute_network
+get_project_pert = compute_pert_analysis

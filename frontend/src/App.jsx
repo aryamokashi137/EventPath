@@ -1,19 +1,27 @@
 
-import NetworkDiagram from "./pages/NetworkDiagram";
 import ProjectAnalysis from "./pages/ProjectAnalysis";
 import Network from "./pages/Network";
+import Analytics from "./pages/Analytics";
+import Schedule from "./pages/Schedule";
+import Settings from "./pages/Settings";
+import Profile from "./pages/Profile";
 import { NavLink, Route, Routes } from "react-router-dom";
 import {
   BarChart3,
   CalendarDays,
   ChevronRight,
+  Crown,
   FolderKanban,
   LayoutDashboard,
   Menu,
-  Settings,
+  Settings as SettingsIcon,
+  Sun,
+  Moon,
+  User,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "./context/AuthContext";
 
 import Dashboard from "./pages/Dashboard";
 import Projects from "./pages/Projects";
@@ -22,7 +30,20 @@ import ProjectDetails from "./pages/ProjectDetails";
 import "./App.css";
 
 function App() {
+  const { role, toggleRole, isAdmin } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem("eventpath_theme") || "light";
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("eventpath_theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+  };
 
   const closeSidebar = () => {
     setSidebarOpen(false);
@@ -122,30 +143,32 @@ function App() {
           </div>
 
           {/* Schedule */}
-          <button
-            type="button"
-            className="sidebar-link sidebar-link-button"
+          <NavLink
+            to="/schedule"
+            onClick={closeSidebar}
+            className={({ isActive }) =>
+              `sidebar-link ${
+                isActive ? "sidebar-link-active" : ""
+              }`
+            }
           >
             <CalendarDays size={19} />
             <span>Schedule</span>
-
-            <span className="coming-soon-badge">
-              Soon
-            </span>
-          </button>
+          </NavLink>
 
           {/* Settings */}
-          <button
-            type="button"
-            className="sidebar-link sidebar-link-button"
+          <NavLink
+            to="/settings"
+            onClick={closeSidebar}
+            className={({ isActive }) =>
+              `sidebar-link ${
+                isActive ? "sidebar-link-active" : ""
+              }`
+            }
           >
-            <Settings size={19} />
+            <SettingsIcon size={19} />
             <span>Settings</span>
-
-            <span className="coming-soon-badge">
-              Soon
-            </span>
-          </button>
+          </NavLink>
 
         </nav>
 
@@ -195,8 +218,111 @@ function App() {
           </div>
 
           <div className="topbar-status">
+            {/* Role Switcher Toggle */}
+            <button
+              type="button"
+              onClick={toggleRole}
+              title={`Active Role: ${role}. Click to switch to ${isAdmin ? "Standard User" : "Admin"}`}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: isAdmin ? "1px solid #c7d2fe" : "1px solid #bae6fd",
+                background: isAdmin ? "rgba(99, 102, 241, 0.12)" : "rgba(14, 165, 233, 0.12)",
+                color: isAdmin ? "var(--accent)" : "#0284c7",
+                cursor: "pointer",
+                fontWeight: 700,
+                fontSize: "0.8rem",
+                boxShadow: "var(--shadow-sm)",
+                transition: "all 0.2s ease",
+              }}
+            >
+              {isAdmin ? (
+                <>
+                  <Crown size={15} color="var(--accent)" />
+                  <span>Role: ADMIN</span>
+                </>
+              ) : (
+                <>
+                  <User size={15} color="#0284c7" />
+                  <span>Role: USER (Read-Only)</span>
+                </>
+              )}
+            </button>
 
-            <span className="status-dot" />
+            <button
+              type="button"
+              onClick={toggleTheme}
+              title={`Switch to ${theme === "light" ? "Dark" : "Light"} Mode`}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--border-color)",
+                background: "var(--bg-card)",
+                color: "var(--text-primary)",
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: "0.8rem",
+                boxShadow: "var(--shadow-sm)",
+                transition: "all 0.2s ease",
+              }}
+            >
+              {theme === "light" ? (
+                <>
+                  <Moon size={15} color="#6366f1" />
+                  <span>Dark Mode</span>
+                </>
+              ) : (
+                <>
+                  <Sun size={15} color="#f59e0b" />
+                  <span>Light Mode</span>
+                </>
+              )}
+            </button>
+
+            <NavLink
+              to="/profile"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "4px 10px",
+                borderRadius: "8px",
+                background: "var(--bg-card)",
+                border: "1px solid var(--border-color)",
+                color: "var(--text-primary)",
+                textDecoration: "none",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+              }}
+            >
+              <div
+                style={{
+                  width: "24px",
+                  height: "24px",
+                  borderRadius: "50%",
+                  background: "#6366f1",
+                  color: "#fff",
+                  fontSize: "0.7rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: 800,
+                }}
+              >
+                AM
+              </div>
+              <span>Arya Mokashi</span>
+            </NavLink>
+
+            <span className="status-dot" style={{ marginLeft: "6px" }} />
 
             <span>System Ready</span>
 
@@ -227,11 +353,6 @@ function App() {
               element={<Projects />}
             />
 
-<Route
-  path="/projects/:projectId/network"
-  element={<NetworkDiagram />}
-/>
-            {}
             <Route
               path="/projects/:projectId"
               element={<ProjectDetails />}
@@ -247,25 +368,24 @@ function App() {
   element={<Network />}
 />
 
-            {}
             <Route
               path="/analytics"
-              element={
-                <div className="placeholder-page">
+              element={<Analytics />}
+            />
 
-                  <div className="placeholder-icon">
-                    <BarChart3 size={30} />
-                  </div>
+            <Route
+              path="/schedule"
+              element={<Schedule />}
+            />
 
-                  <h1>Analytics</h1>
+            <Route
+              path="/settings"
+              element={<Settings />}
+            />
 
-                  <p>
-                    Project analytics and schedule
-                    insights will appear here.
-                  </p>
-
-                </div>
-              }
+            <Route
+              path="/profile"
+              element={<Profile />}
             />
 
           </Routes>

@@ -7,10 +7,12 @@ import {
   updateActivity,
   deleteActivity,
 } from "../services/activityService";
+import { useAuth } from "../context/AuthContext";
 
 function ProjectDetails() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
 
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -19,10 +21,21 @@ function ProjectDetails() {
 
   const [activityName, setActivityName] = useState("");
   const [duration, setDuration] = useState("");
-const [optimisticTime, setOptimisticTime] = useState("");
-const [mostLikelyTime, setMostLikelyTime] = useState("");
-const [pessimisticTime, setPessimisticTime] = useState("");
-const [category, setCategory] = useState("");
+  const [optimisticTime, setOptimisticTime] = useState("");
+  const [mostLikelyTime, setMostLikelyTime] = useState("");
+  const [pessimisticTime, setPessimisticTime] = useState("");
+  const [category, setCategory] = useState("");
+  
+  // Gap 2: Crashing & Cost fields
+  const [crashDuration, setCrashDuration] = useState("");
+  const [normalCost, setNormalCost] = useState("");
+  const [crashCost, setCrashCost] = useState("");
+
+  // Gap 5: Vendor Availability fields
+  const [vendorName, setVendorName] = useState("");
+  const [vendorAvailableFrom, setVendorAvailableFrom] = useState("");
+  const [vendorAvailableTo, setVendorAvailableTo] = useState("");
+
   const [predecessorIds, setPredecessorIds] = useState([]);
 
   const [editingActivityId, setEditingActivityId] = useState(null);
@@ -60,20 +73,30 @@ const [category, setCategory] = useState("");
   // RESET FORM
   // =========================
   const resetForm = () => {
-  setActivityName("");
-  setDuration("");
-  setOptimisticTime("");
-  setMostLikelyTime("");
-  setPessimisticTime("");
-  setCategory("");
-  setPredecessorIds([]);
-  setEditingActivityId(null);
-};
+    setActivityName("");
+    setDuration("");
+    setOptimisticTime("");
+    setMostLikelyTime("");
+    setPessimisticTime("");
+    setCategory("");
+    setCrashDuration("");
+    setNormalCost("");
+    setCrashCost("");
+    setVendorName("");
+    setVendorAvailableFrom("");
+    setVendorAvailableTo("");
+    setPredecessorIds([]);
+    setEditingActivityId(null);
+  };
 
   // =========================
   // CREATE ACTIVITY
   // =========================
  const handleCreateActivity = async () => {
+  if (!isAdmin) {
+    setError("Access Denied: Workspace Administrator privileges ('ADMIN' role) are required to create activities.");
+    return;
+  }
   if (!activityName.trim()) {
     setError("Please enter an activity name.");
     return;
@@ -142,6 +165,12 @@ const [category, setCategory] = useState("");
 
       category: category.trim() || null,
       is_milestone: false,
+      crash_duration: crashDuration ? Number(crashDuration) : null,
+      normal_cost: normalCost ? Number(normalCost) : null,
+      crash_cost: crashCost ? Number(crashCost) : null,
+      vendor_name: vendorName.trim() || null,
+      vendor_available_from: vendorAvailableFrom || null,
+      vendor_available_to: vendorAvailableTo || null,
       predecessor_ids: [...predecessorIds],
     };
 
@@ -169,34 +198,33 @@ const [category, setCategory] = useState("");
     setActivityName(activity.name);
     setDuration(activity.duration || "");
 
-setOptimisticTime(
-  activity.optimistic_time || ""
-);
+    setOptimisticTime(activity.optimistic_time || "");
+    setMostLikelyTime(activity.most_likely_time || "");
+    setPessimisticTime(activity.pessimistic_time || "");
+    setCategory(activity.category || "");
+    setCrashDuration(activity.crash_duration || "");
+    setNormalCost(activity.normal_cost || "");
+    setCrashCost(activity.crash_cost || "");
+    setVendorName(activity.vendor_name || "");
+    setVendorAvailableFrom(activity.vendor_available_from || "");
+    setVendorAvailableTo(activity.vendor_available_to || "");
 
-setMostLikelyTime(
-  activity.most_likely_time || ""
-);
-
-setPessimisticTime(
-  activity.pessimistic_time || ""
-);
-
-setCategory(activity.category || "");
-
-    setPredecessorIds(
-      activity.predecessor_ids || []
-    );
+    setPredecessorIds(activity.predecessor_ids || []);
 
     setError("");
   };
 
   const handleUpdateActivity = async () => {
+    if (!isAdmin) {
+      setError("Access Denied: Workspace Administrator privileges ('ADMIN' role) are required to edit activities.");
+      return;
+    }
     if (!activityName.trim()) {
       setError("Please enter an activity name.");
       return;
     }
 
-    if (!duration || Number(duration) <= 0) {
+    if (!isPERT && (!duration || Number(duration) <= 0)) {
       setError("Please enter a valid duration.");
       return;
     }
@@ -206,28 +234,31 @@ setCategory(activity.category || "");
       setError("");
 
       const payload = {
-  name: activityName.trim(),
+        name: activityName.trim(),
 
-  duration: isPERT
-    ? 0
-    : Number(duration),
+        duration: isPERT ? 0 : Number(duration),
 
-  optimistic_time: isPERT
-    ? Number(optimisticTime)
-    : null,
+        optimistic_time: isPERT
+          ? Number(optimisticTime)
+          : null,
 
-  most_likely_time: isPERT
-    ? Number(mostLikelyTime)
-    : null,
+        most_likely_time: isPERT
+          ? Number(mostLikelyTime)
+          : null,
 
-  pessimistic_time: isPERT
-    ? Number(pessimisticTime)
-    : null,
+        pessimistic_time: isPERT
+          ? Number(pessimisticTime)
+          : null,
 
-  category: category.trim() || null,
-
-  predecessor_ids: [...predecessorIds],
-};
+        category: category.trim() || null,
+        crash_duration: crashDuration ? Number(crashDuration) : null,
+        normal_cost: normalCost ? Number(normalCost) : null,
+        crash_cost: crashCost ? Number(crashCost) : null,
+        vendor_name: vendorName.trim() || null,
+        vendor_available_from: vendorAvailableFrom || null,
+        vendor_available_to: vendorAvailableTo || null,
+        predecessor_ids: [...predecessorIds],
+      };
 
       console.log("Updating activity with:", payload);
 
@@ -254,6 +285,10 @@ setCategory(activity.category || "");
   };
 
   const handleDeleteActivity = async (activityId) => {
+    if (!isAdmin) {
+      alert("Access Denied: Workspace Administrator privileges ('ADMIN' role) are required to delete activities.");
+      return;
+    }
     const confirmed = window.confirm(
       "Are you sure you want to delete this activity?"
     );
@@ -515,12 +550,86 @@ setCategory(activity.category || "");
           {/* Category */}
           <input
             type="text"
-            placeholder="Category (e.g. VENUE)"
+            placeholder="Category (e.g. VENUE, CATERING)"
             value={category}
             onChange={(e) =>
               setCategory(e.target.value)
             }
           />
+
+          {/* Gap 2: Crashing Parameters */}
+          <div style={{ marginTop: "12px", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "12px", background: "#f8fafc" }}>
+            <p style={{ fontWeight: 600, fontSize: "0.875rem", margin: "0 0 8px 0", color: "#334155" }}>
+              ⚡ Schedule Crashing & Costs (Gap 2)
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+              <div>
+                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Crash Duration (days)</label>
+                <input
+                  type="number"
+                  placeholder="Min duration"
+                  value={crashDuration}
+                  onChange={(e) => setCrashDuration(e.target.value)}
+                  min="0.1"
+                  step="0.1"
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Normal Cost (₹)</label>
+                <input
+                  type="number"
+                  placeholder="Cost"
+                  value={normalCost}
+                  onChange={(e) => setNormalCost(e.target.value)}
+                  min="0"
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Crash Cost (₹)</label>
+                <input
+                  type="number"
+                  placeholder="Max crash cost"
+                  value={crashCost}
+                  onChange={(e) => setCrashCost(e.target.value)}
+                  min="0"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Gap 5: Vendor Availability */}
+          <div style={{ marginTop: "12px", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "12px", background: "#f8fafc" }}>
+            <p style={{ fontWeight: 600, fontSize: "0.875rem", margin: "0 0 8px 0", color: "#334155" }}>
+              🤝 Vendor Availability Window (Gap 5)
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "8px" }}>
+              <div>
+                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Vendor Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Grand Palace Events"
+                  value={vendorName}
+                  onChange={(e) => setVendorName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Available From</label>
+                <input
+                  type="date"
+                  value={vendorAvailableFrom}
+                  onChange={(e) => setVendorAvailableFrom(e.target.value)}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Available To</label>
+                <input
+                  type="date"
+                  value={vendorAvailableTo}
+                  onChange={(e) => setVendorAvailableTo(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
 
           {/* =========================
               PREDECESSOR ACTIVITIES

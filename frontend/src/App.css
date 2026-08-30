@@ -3,17 +3,19 @@
   --sidebar-width: 260px;
   --topbar-height: 68px;
 
-  --bg-main: #f6f7fb;
-  --bg-sidebar: #111827;
-  --bg-sidebar-hover: #1f2937;
+  --bg-main: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-sidebar: #0f172a;
+  --bg-sidebar-hover: #1e293b;
+  --topbar-bg: rgba(255, 255, 255, 0.88);
 
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
 
-  --border-color: #e5e7eb;
+  --border-color: #e2e8f0;
 
-  --accent: #4f46e5;
+  --accent: #6366f1;
   --accent-light: #eef2ff;
 
   --success: #16a34a;
@@ -22,11 +24,30 @@
   --radius-md: 12px;
   --radius-lg: 16px;
 
-  --shadow-sm:
-    0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 2px 4px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.03);
+  --shadow-md: 0 8px 24px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 16px 36px -4px rgba(15, 23, 42, 0.12), 0 8px 16px -3px rgba(15, 23, 42, 0.06);
+}
 
-  --shadow-md:
-    0 8px 24px rgba(15, 23, 42, 0.07);
+[data-theme="dark"] {
+  --bg-main: #0b0f19;
+  --bg-card: #151d30;
+  --bg-sidebar: #090d16;
+  --bg-sidebar-hover: #1e293b;
+  --topbar-bg: rgba(21, 29, 48, 0.88);
+
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #64748b;
+
+  --border-color: #27354f;
+
+  --accent: #818cf8;
+  --accent-light: rgba(99, 102, 241, 0.18);
+
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 8px 28px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 18px 42px rgba(0, 0, 0, 0.65);
 }
 
 * {
@@ -312,7 +333,7 @@ textarea {
 
   border-bottom: 1px solid var(--border-color);
 
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--topbar-bg);
 
   backdrop-filter: blur(10px);
 
@@ -562,8 +583,13 @@ textarea {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
 
-  background: white;
-  box-shadow: var(--shadow-sm);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-md);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dashboard-hero:hover {
+  box-shadow: var(--shadow-lg);
 }
 
 .eyebrow {
@@ -584,6 +610,7 @@ textarea {
   font-size: 30px;
   line-height: 1.2;
   letter-spacing: -0.02em;
+  color: var(--text-primary);
 }
 
 .dashboard-hero p {
@@ -638,7 +665,14 @@ textarea {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
 
-  background: white;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-md);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
 }
 
 .stat-icon {
@@ -689,6 +723,7 @@ textarea {
   margin: 0;
 
   font-size: 18px;
+  color: var(--text-primary);
 }
 
 .section-heading p {
@@ -727,7 +762,8 @@ textarea {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
 
-  background: white;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-md);
 
   cursor: pointer;
 
@@ -740,9 +776,9 @@ textarea {
 .dashboard-project-card:hover {
   transform: translateY(-2px);
 
-  border-color: #c7d2fe;
+  border-color: var(--accent);
 
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg);
 }
 
 .project-card-top {
@@ -770,7 +806,7 @@ textarea {
 
   border-radius: 5px;
 
-  background: #f3f4f6;
+  background: var(--bg-main);
 
   color: var(--text-secondary);
 
@@ -782,6 +818,7 @@ textarea {
   margin: 18px 0 6px;
 
   font-size: 14px;
+  color: var(--text-primary);
 }
 
 .dashboard-project-card p {
@@ -821,7 +858,7 @@ textarea {
   border: 1px dashed #d1d5db;
   border-radius: var(--radius-lg);
 
-  background: white;
+  background: var(--bg-card);
 
   text-align: center;
 }
@@ -1144,7 +1181,8 @@ textarea {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
 
-  background: white;
+  background: var(--bg-card);
+  color: var(--text-primary);
 
   box-shadow: var(--shadow-sm);
 }
@@ -1180,6 +1218,7 @@ textarea {
   margin-top: 4px;
 
   font-size: 18px;
+  color: var(--text-primary);
 }
 
 .analysis-panel {
@@ -1188,9 +1227,10 @@ textarea {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
 
-  background: white;
+  background: var(--bg-card);
+  color: var(--text-primary);
 
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
 }
 
 .analysis-panel-header {
@@ -1203,6 +1243,7 @@ textarea {
   margin: 0;
 
   font-size: 18px;
+  color: var(--text-primary);
 }
 
 .analysis-panel-header p {
@@ -1281,7 +1322,8 @@ textarea {
 .analysis-table th {
   padding: 13px 16px;
 
-  background: #f9fafb;
+  background: var(--bg-main);
+  border-bottom: 1px solid var(--border-color);
 
   color: var(--text-secondary);
 
@@ -2360,7 +2402,7 @@ textarea {
   border: 1px solid var(--border-color);
   border-radius: 8px;
 
-  background: white;
+  background: var(--bg-card);
 
   cursor: pointer;
 
@@ -2453,7 +2495,7 @@ textarea {
 
 /* Cancel button */
 .activity-form > button:last-child:not(:first-child) {
-  background: white;
+  background: var(--bg-card);
 
   color: var(--text-primary);
 
@@ -2548,7 +2590,7 @@ textarea {
   border: 1px solid var(--border-color);
   border-radius: 8px;
 
-  background: white;
+  background: var(--bg-card);
 
   color: var(--text-primary);
 
@@ -2744,7 +2786,7 @@ textarea {
   border: 1px solid var(--border-color);
   border-radius: 8px;
 
-  background: white;
+  background: var(--bg-main);
   color: var(--text-primary);
 
   font-size: 12px;
@@ -2879,7 +2921,7 @@ textarea {
   border: 1px solid var(--border-color);
   border-radius: 8px;
 
-  background: white;
+  background: var(--bg-main);
   color: var(--text-primary);
 
   font-size: 12px;

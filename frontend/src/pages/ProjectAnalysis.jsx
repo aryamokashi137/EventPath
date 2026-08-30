@@ -10,11 +10,23 @@ import {
 } from "lucide-react";
 
 import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from "recharts";
+
+import {
   getProject,
   getProjectNetwork,
   getProjectPERT,
   simulateProject,
-    crashProject,
+  crashProject,
+  runMonteCarlo,
+  checkVendorAvailability,
 } from "../services/projectService";
 
 function ProjectAnalysis() {
@@ -22,10 +34,17 @@ function ProjectAnalysis() {
   const navigate = useNavigate();
 
   const [project, setProject] = useState(null);
-const [network, setNetwork] = useState(null);
-const [pert, setPert] = useState(null);
-const [loading, setLoading] = useState(true);
-const [error, setError] = useState("");
+  const [network, setNetwork] = useState(null);
+  const [pert, setPert] = useState(null);
+  const [availability, setAvailability] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [mcNumSimulations, setMcNumSimulations] = useState(1000);
+  const [mcTargetTime, setMcTargetTime] = useState("");
+  const [mcResult, setMcResult] = useState(null);
+  const [mcLoading, setMcLoading] = useState(false);
+  const [mcError, setMcError] = useState("");
 
 const [simulationActivity, setSimulationActivity] =
   useState("");
@@ -63,16 +82,18 @@ const [selectedActivityId, setSelectedActivityId] = useState("");
         setLoading(true);
         setError("");
 
-        const [projectData, networkData, pertData] =
-  await Promise.all([
-    getProject(projectId),
-    getProjectNetwork(projectId),
-    getProjectPERT(projectId),
-  ]);
+        const [projectData, networkData, pertData, availabilityData] =
+          await Promise.all([
+            getProject(projectId),
+            getProjectNetwork(projectId),
+            getProjectPERT(projectId),
+            checkVendorAvailability(projectId).catch(() => null),
+          ]);
 
-setProject(projectData);
-setNetwork(networkData);
-setPert(pertData);
+        setProject(projectData);
+        setNetwork(networkData);
+        setPert(pertData);
+        setAvailability(availabilityData);
 
 
 
@@ -184,6 +205,31 @@ const handleCrash = async () => {
     setCrashLoading(false);
   }
 };
+
+  const handleMonteCarlo = async () => {
+    try {
+      setMcLoading(true);
+      setMcError("");
+      setMcResult(null);
+
+      const payload = {
+        num_simulations: Number(mcNumSimulations) || 1000,
+        target_time: mcTargetTime ? Number(mcTargetTime) : null,
+      };
+
+      const result = await runMonteCarlo(projectId, payload);
+      console.log("Monte Carlo result:", result);
+      setMcResult(result);
+    } catch (err) {
+      console.error("Monte Carlo error:", err);
+      setMcError(
+        err.response?.data?.detail ||
+          "Failed to run Monte Carlo simulation."
+      );
+    } finally {
+      setMcLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -436,6 +482,329 @@ const availableTime =
 
   </section>
 )}
+
+{/* Monte Carlo Risk Assessment */}
+<section className="analysis-panel">
+  <div className="analysis-panel-header">
+    <div>
+      <span className="analysis-eyebrow">
+        PROBABILISTIC RISK ASSESSMENT
+      </span>
+
+      <h2>Monte Carlo PERT Simulation</h2>
+
+      <p>
+        Perform stochastic triangular sampling (100–10,000 runs) to resolve
+        merge-event path bias, compute completion percentiles (P10–P95),
+        activity criticality indices, and cumulative S-Curves.
+      </p>
+    </div>
+  </div>
+
+  <div className="simulation-form">
+    <div>
+      <label>Number of Simulations</label>
+      <select
+        value={mcNumSimulations}
+        onChange={(e) => setMcNumSimulations(Number(e.target.value))}
+      >
+        <option value={500}>500 Runs</option>
+        <option value={1000}>1,000 Runs (Standard)</option>
+        <option value={2500}>2,500 Runs</option>
+        <option value={5000}>5,000 Runs (High Precision)</option>
+        <option value={10000}>10,000 Runs (Maximum)</option>
+      </select>
+    </div>
+
+    <div>
+      <label>Target Duration (Days, Optional)</label>
+      <input
+        type="number"
+        min="0.1"
+        step="0.1"
+        value={mcTargetTime}
+        onChange={(e) => setMcTargetTime(e.target.value)}
+        placeholder={`Default: ${Number(projectDuration).toFixed(2)} days`}
+      />
+    </div>
+
+    <button
+      type="button"
+      onClick={handleMonteCarlo}
+      disabled={mcLoading}
+    >
+      {mcLoading ? "Running Simulation..." : "Run Monte Carlo Simulation"}
+    </button>
+  </div>
+
+  {mcError && (
+    <div className="simulation-error">
+      {mcError}
+    </div>
+  )}
+
+  {mcResult && (
+    <div className="simulation-result">
+      <h3>Monte Carlo Results ({mcResult.num_simulations.toLocaleString()} Runs)</h3>
+
+      <div className="pert-results-grid">
+        <div className="pert-result-card">
+          <span>Mean Expected Duration</span>
+          <strong>{Number(mcResult.mean_duration).toFixed(2)} days</strong>
+        </div>
+
+        <div className="pert-result-card">
+          <span>Standard Deviation</span>
+          <strong>±{Number(mcResult.std_dev_duration).toFixed(2)} days</strong>
+        </div>
+
+        <div className="pert-result-card">
+          <span>Duration Range</span>
+          <strong>{Number(mcResult.min_duration).toFixed(1)} – {Number(mcResult.max_duration).toFixed(1)} days</strong>
+        </div>
+
+        {mcResult.empirical_probability !== null && (
+          <div className="pert-result-card">
+            <span>Target Completion Prob.</span>
+            <strong>{(mcResult.empirical_probability * 100).toFixed(1)}%</strong>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: "1.5rem" }}>
+        <p style={{ fontWeight: 600, marginBottom: "0.5rem" }}>Schedule Percentiles:</p>
+        <div className="pert-results-grid">
+          <div className="pert-result-card">
+            <span>P10 (Optimistic)</span>
+            <strong>{Number(mcResult.p10).toFixed(2)} days</strong>
+          </div>
+          <div className="pert-result-card">
+            <span>P50 (Median)</span>
+            <strong>{Number(mcResult.p50).toFixed(2)} days</strong>
+          </div>
+          <div className="pert-result-card">
+            <span>P80 (Likely)</span>
+            <strong>{Number(mcResult.p80).toFixed(2)} days</strong>
+          </div>
+          <div className="pert-result-card">
+            <span>P90 (Conservative)</span>
+            <strong>{Number(mcResult.p90).toFixed(2)} days</strong>
+          </div>
+          <div className="pert-result-card">
+            <span>P95 (Pessimistic)</span>
+            <strong>{Number(mcResult.p95).toFixed(2)} days</strong>
+          </div>
+        </div>
+      </div>
+
+      {/* S-Curve Chart */}
+      {mcResult.s_curve && mcResult.s_curve.length > 0 && (
+        <div style={{ marginTop: "2rem" }}>
+          <p style={{ fontWeight: 600, marginBottom: "0.25rem" }}>Cumulative Probability S-Curve</p>
+          <p style={{ fontSize: "0.85rem", color: "#64748b", marginBottom: "1rem" }}>
+            Probability of project completion by target duration.
+          </p>
+          <div style={{ width: "100%", height: 300, background: "#ffffff", padding: "16px", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={mcResult.s_curve}>
+                <defs>
+                  <linearGradient id="scurveGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis
+                  dataKey="duration"
+                  tickFormatter={(val) => `${Number(val).toFixed(1)}d`}
+                  stroke="#94a3b8"
+                />
+                <YAxis
+                  domain={[0, 100]}
+                  tickFormatter={(val) => `${val}%`}
+                  stroke="#94a3b8"
+                />
+                <Tooltip
+                  formatter={(value) => [`${Number(value).toFixed(1)}%`, "Probability"]}
+                  labelFormatter={(label) => `Duration: ${Number(label).toFixed(2)} days`}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="cumulative_probability"
+                  stroke="#6366f1"
+                  strokeWidth={3}
+                  fillOpacity={1}
+                  fill="url(#scurveGradient)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Criticality Indices Table */}
+      {mcResult.criticality_indices && mcResult.criticality_indices.length > 0 && (
+        <div style={{ marginTop: "2rem" }}>
+          <p style={{ fontWeight: 600, marginBottom: "0.25rem" }}>Activity Criticality Index (Merge-Event Risk)</p>
+          <p style={{ fontSize: "0.85rem", color: "#64748b", marginBottom: "1rem" }}>
+            Percentage of simulation runs where each activity was on the critical path.
+          </p>
+          <div className="analysis-table-wrapper">
+            <table className="analysis-table">
+              <thead>
+                <tr>
+                  <th>Activity Name</th>
+                  <th>Criticality Index (%)</th>
+                  <th>Risk Level</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mcResult.criticality_indices.map((item) => {
+                  const pct = Number(item.criticality_percentage);
+                  return (
+                    <tr key={item.activity_id}>
+                      <td><strong>{item.activity_name}</strong></td>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <div style={{ flex: 1, height: "8px", background: "#e2e8f0", borderRadius: "4px", overflow: "hidden" }}>
+                            <div
+                              style={{
+                                width: `${pct}%`,
+                                height: "100%",
+                                background: pct > 80 ? "#ef4444" : pct > 40 ? "#f59e0b" : "#3b82f6",
+                                borderRadius: "4px"
+                              }}
+                            />
+                          </div>
+                          <span style={{ fontWeight: 600, minWidth: "45px" }}>{pct.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                      <td>
+                        {pct > 80 ? (
+                          <span className="critical-badge">High Risk</span>
+                        ) : (
+                          <span className="normal-badge">Standard</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )}
+</section>
+
+{/* Vendor Availability & Overbooking Verification (Gap 5) */}
+<section className="analysis-panel">
+  <div className="analysis-panel-header">
+    <div>
+      <span className="analysis-eyebrow">
+        RESOURCE & VENDOR CONSTRAINTS
+      </span>
+
+      <h2>Vendor Availability & Overbooking Verification</h2>
+
+      <p>
+        Audit vendor availability date windows and detect concurrent vendor double-booking conflicts across scheduled activity timelines.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      className="analysis-back-button"
+      style={{ padding: "8px 16px", borderRadius: "8px", background: "#f1f5f9", cursor: "pointer" }}
+      onClick={async () => {
+        setAvailabilityLoading(true);
+        const report = await checkVendorAvailability(projectId).catch(() => null);
+        setAvailability(report);
+        setAvailabilityLoading(false);
+      }}
+      disabled={availabilityLoading}
+    >
+      {availabilityLoading ? "Re-checking..." : "Run Vendor Audit"}
+    </button>
+  </div>
+
+  {availability ? (
+    <div style={{ marginTop: "1rem" }}>
+      {availability.has_conflicts ? (
+        <div style={{ padding: "16px", borderRadius: "12px", background: "#fef2f2", border: "1px solid #fecaca", marginBottom: "1.5rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#991b1b", fontWeight: 700, fontSize: "1.1rem" }}>
+            <span>⚠️ {availability.total_conflicts} Vendor Schedule Conflict(s) Detected</span>
+          </div>
+          <p style={{ margin: "4px 0 0 0", color: "#7f1d1d", fontSize: "0.9rem" }}>
+            The scheduling engine detected vendor availability date range violations or concurrent vendor double-bookings.
+          </p>
+        </div>
+      ) : (
+        <div style={{ padding: "16px", borderRadius: "12px", background: "#f0fdf4", border: "1px solid #bbf7d0", marginBottom: "1.5rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#166534", fontWeight: 700, fontSize: "1.1rem" }}>
+            <span>✅ All Vendor Constraints Satisfied</span>
+          </div>
+          <p style={{ margin: "4px 0 0 0", color: "#14532d", fontSize: "0.9rem" }}>
+            No vendor date range violations or overlapping vendor double-bookings were found across the active schedule.
+          </p>
+        </div>
+      )}
+
+      {availability.conflicts && availability.conflicts.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <h4 style={{ margin: 0 }}>Conflict Report & AI Resolution Advice:</h4>
+          {availability.conflicts.map((conflict, index) => (
+            <div
+              key={index}
+              style={{
+                border: "1px solid #e2e8f0",
+                borderRadius: "12px",
+                padding: "16px",
+                background: "#ffffff",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <span className="critical-badge" style={{ background: conflict.conflict_type === "VENDOR_OVERBOOKING" ? "#7c3aed" : "#ef4444" }}>
+                  {conflict.conflict_type === "VENDOR_OVERBOOKING" ? "🤝 VENDOR OVERBOOKING" : "📅 AVAILABILITY WINDOW VIOLATION"}
+                </span>
+                <span style={{ fontSize: "0.85rem", color: "#64748b" }}>
+                  Available Float: <strong>{Number(conflict.total_float).toFixed(1)} days</strong>
+                </span>
+              </div>
+
+              <h4 style={{ margin: "4px 0 8px 0", fontSize: "1rem" }}>
+                Activity: <strong>{conflict.activity_name}</strong> {conflict.vendor_name && `(Vendor: ${conflict.vendor_name})`}
+              </h4>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "0.875rem", color: "#475569", marginBottom: "12px" }}>
+                <div>
+                  <strong>Scheduled Dates:</strong> {conflict.scheduled_start} to {conflict.scheduled_finish}
+                </div>
+                {conflict.conflict_type === "VENDOR_AVAILABILITY_VIOLATION" ? (
+                  <div>
+                    <strong>Vendor Window:</strong> {conflict.available_from || "N/A"} to {conflict.available_to || "N/A"}
+                  </div>
+                ) : (
+                  <div>
+                    <strong>Conflicting Activity:</strong> {conflict.conflicting_activity_name || "N/A"}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ padding: "10px 12px", borderRadius: "8px", background: "#f8fafc", borderLeft: "4px solid #6366f1", fontSize: "0.875rem" }}>
+                <strong>💡 Recommended Resolution:</strong> {conflict.resolution_recommendation}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  ) : (
+    <p style={{ color: "#64748b" }}>Vendor audit data not available.</p>
+  )}
+</section>
 
 {/* What-If Simulation */}
 

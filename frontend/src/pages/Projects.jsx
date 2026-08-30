@@ -16,17 +16,21 @@ import {
   createProject,
   deleteProject,
   getProjects,
+  createProjectFromTemplate,
 } from "../services/projectService";
+import { useAuth } from "../context/AuthContext";
 
 import "./Projects.css";
 
 function Projects() {
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
 
   const [projects, setProjects] = useState([]);
   const [search, setSearch] = useState("");
   const [modeFilter, setModeFilter] = useState("ALL");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [modalTab, setModalTab] = useState("custom"); // 'custom' | 'template'
 
   const [form, setForm] = useState({
     name: "",
@@ -135,7 +139,32 @@ const [error, setError] = useState("");
     }
   };
 
-    const handleDeleteProject = async (project) => {
+  const handleCreateFromTemplate = async (templateKey) => {
+    try {
+      setCreating(true);
+      setError("");
+
+      const project = await createProjectFromTemplate(templateKey);
+      setProjects((current) => [project, ...current]);
+      setShowCreateModal(false);
+    } catch (err) {
+      console.error("Error creating project from template:", err);
+
+      setError(
+        err.response?.data?.detail ||
+          "Failed to create project from template."
+      );
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDeleteProject = async (project) => {
+    if (!isAdmin) {
+      alert("Access Denied: Workspace Administrator privileges ('ADMIN' role) are required to delete projects.");
+      return;
+    }
+
     const confirmed = window.confirm(
       `Are you sure you want to delete "${project.name}"?\n\n` +
         "This will also delete all activities associated with this project."
@@ -168,6 +197,12 @@ const [error, setError] = useState("");
 
   return (
     <div className="projects-page">
+      {!isAdmin && (
+        <div style={{ padding: "12px 16px", borderRadius: "10px", background: "rgba(14, 165, 233, 0.12)", border: "1px solid #bae6fd", color: "#0284c7", fontSize: "0.85rem", fontWeight: 600, marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
+          <span>👤 <strong>User Mode (Read-Only)</strong>: You are viewing projects in standard User mode. Workspace Admin privileges are required to create or delete projects. Toggle role in the topbar to test.</span>
+        </div>
+      )}
+
       {/* Header */}
       <section className="projects-hero">
         <div>
@@ -186,13 +221,17 @@ const [error, setError] = useState("");
 
         <button
           className="primary-action"
+          disabled={!isAdmin}
+          title={isAdmin ? "Create a new project" : "Admin role required to create projects"}
           onClick={() => {
+            if (!isAdmin) return;
             setError("");
             setShowCreateModal(true);
           }}
+          style={!isAdmin ? { opacity: 0.6, cursor: "not-allowed", filter: "grayscale(40%)" } : {}}
         >
           <Plus size={18} />
-          New Project
+          {isAdmin ? "New Project" : "New Project (Admin Only)"}
         </button>
       </section>
 
@@ -438,7 +477,7 @@ const [error, setError] = useState("");
                 <h2>Create Project</h2>
 
                 <p>
-                  Set up the basic planning information.
+                  Set up custom planning details or choose a pre-built industry template.
                 </p>
               </div>
 
@@ -453,6 +492,97 @@ const [error, setError] = useState("");
               </button>
             </div>
 
+            <div style={{ display: "flex", gap: "12px", borderBottom: "1px solid #e2e8f0", marginBottom: "20px", paddingBottom: "10px" }}>
+              <button
+                type="button"
+                className={modalTab === "custom" ? "filter-active" : ""}
+                style={{ padding: "6px 16px", borderRadius: "8px", border: "none", cursor: "pointer", fontWeight: 600 }}
+                onClick={() => setModalTab("custom")}
+              >
+                Custom Blank Project
+              </button>
+
+              <button
+                type="button"
+                className={modalTab === "template" ? "filter-active" : ""}
+                style={{ padding: "6px 16px", borderRadius: "8px", border: "none", cursor: "pointer", fontWeight: 600 }}
+                onClick={() => setModalTab("template")}
+              >
+                ✨ Industry Domain Templates (Gap 4)
+              </button>
+            </div>
+
+            {modalTab === "template" ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div
+                  style={{
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "12px",
+                    padding: "16px",
+                    background: "#f8fafc",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <h3 style={{ margin: 0, fontSize: "1.05rem" }}>💒 Grand Wedding Ceremony & Reception</h3>
+                    <span className="mode-badge mode-pert">PERT</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.875rem", color: "#64748b" }}>
+                    Pre-populated 9-activity DAG featuring venue booking, catering, invitations, floral decor, audio-visual, RSVP tracking, rehearsal, and reception.
+                  </p>
+                  <div style={{ display: "flex", gap: "12px", fontSize: "0.8rem", color: "#475569" }}>
+                    <span>• 9 Predefined Activities</span>
+                    <span>• Vendor Categories & Milestones</span>
+                    <span>• Crashing Costs Included</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary-action"
+                    disabled={creating}
+                    style={{ marginTop: "6px", width: "fit-content" }}
+                    onClick={() => handleCreateFromTemplate("WEDDING_STANDARD")}
+                  >
+                    {creating ? "Instantiating..." : "Use Wedding Template"}
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "12px",
+                    padding: "16px",
+                    background: "#f8fafc",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <h3 style={{ margin: 0, fontSize: "1.05rem" }}>🏢 Annual Tech Conference & Expo</h3>
+                    <span className="mode-badge mode-cpm">CPM</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.875rem", color: "#64748b" }}>
+                    Standard corporate conference workflow covering convention center booking, keynote speakers, sponsorship packages, stage rigging, and live streaming.
+                  </p>
+                  <div style={{ display: "flex", gap: "12px", fontSize: "0.8rem", color: "#475569" }}>
+                    <span>• 6 Predefined Activities</span>
+                    <span>• Stage & AV Media Vendors</span>
+                    <span>• Cost-Time Crashing Ready</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary-action"
+                    disabled={creating}
+                    style={{ marginTop: "6px", width: "fit-content" }}
+                    onClick={() => handleCreateFromTemplate("TECH_CONFERENCE")}
+                  >
+                    {creating ? "Instantiating..." : "Use Tech Conference Template"}
+                  </button>
+                </div>
+              </div>
+            ) : (
             <form onSubmit={handleCreateProject}>
               <div className="form-group">
                 <label>Project Name *</label>
@@ -580,6 +710,7 @@ const [error, setError] = useState("");
                 </button>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}

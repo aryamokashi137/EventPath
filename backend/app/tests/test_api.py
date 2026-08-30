@@ -188,3 +188,52 @@ def test_missing_resource_not_found(client: TestClient):
         json={"name": "Orphan Activity", "duration": 5.0}
     )
     assert response.status_code == 404
+
+
+def test_rbac_authorization_enforcement(client: TestClient):
+    # 1. Admin creates a project (X-User-Role: ADMIN) -> 201 Created
+    response = client.post(
+        "/api/v1/projects",
+        json={"name": "RBAC Test Project", "mode": "CPM"},
+        headers={"X-User-Role": "ADMIN"}
+    )
+    assert response.status_code == 201
+    project_id = response.json()["id"]
+
+    # 2. Standard User attempts to create a project (X-User-Role: USER) -> 403 Forbidden
+    response = client.post(
+        "/api/v1/projects",
+        json={"name": "Unauthorized Project", "mode": "CPM"},
+        headers={"X-User-Role": "USER"}
+    )
+    assert response.status_code == 403
+    assert "Access denied" in response.text or "Admin role required" in response.text
+
+    # 3. Standard User can read project details -> 200 OK
+    response = client.get(
+        f"/api/v1/projects/{project_id}",
+        headers={"X-User-Role": "USER"}
+    )
+    assert response.status_code == 200
+
+    # 4. Standard User attempts to add activity -> 403 Forbidden
+    response = client.post(
+        f"/api/v1/projects/{project_id}/activities",
+        json={"name": "Forbidden Activity", "duration": 5.0},
+        headers={"X-User-Role": "USER"}
+    )
+    assert response.status_code == 403
+
+    # 5. Standard User attempts to delete project -> 403 Forbidden
+    response = client.delete(
+        f"/api/v1/projects/{project_id}",
+        headers={"X-User-Role": "USER"}
+    )
+    assert response.status_code == 403
+
+    # 6. Admin deletes project -> 204 No Content
+    response = client.delete(
+        f"/api/v1/projects/{project_id}",
+        headers={"X-User-Role": "ADMIN"}
+    )
+    assert response.status_code == 204

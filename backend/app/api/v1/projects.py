@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.dependencies.auth import require_admin_role
 
 from app.schemas.project import (
     ProjectCreate,
@@ -27,13 +28,14 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 @router.post(
     "",
     response_model=ProjectResponse,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin_role)]
 )
 def create_project(
     project_in: ProjectCreate,
     db: Session = Depends(get_db)
 ):
-    """Create a new CPM or PERT project."""
+    """Create a new CPM or PERT project (Admin Only)."""
     return project_service.create_project(db, project_in)
 
 
@@ -62,14 +64,15 @@ def get_project(
 
 @router.put(
     "/{project_id}",
-    response_model=ProjectResponse
+    response_model=ProjectResponse,
+    dependencies=[Depends(require_admin_role)]
 )
 def update_project(
     project_id: UUID,
     project_in: ProjectUpdate,
     db: Session = Depends(get_db)
 ):
-    """Update general project details."""
+    """Update general project details (Admin Only)."""
     return project_service.update_project(
         db,
         project_id,
@@ -79,13 +82,14 @@ def update_project(
 
 @router.delete(
     "/{project_id}",
-    status_code=status.HTTP_204_NO_CONTENT
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin_role)]
 )
 def delete_project(
     project_id: UUID,
     db: Session = Depends(get_db)
 ):
-    """Delete a project and all its activities."""
+    """Delete a project and all its activities (Admin Only)."""
     project_service.delete_project(db, project_id)
     return None
 
@@ -97,104 +101,73 @@ def get_project_network(
 ):
     """
     Computes the CPM/PERT network.
-
-    Returns:
-    - nodes: all nodes including virtual START and END
-      with computed ES, EF, LS, LF, slack, and critical status.
-    - edges: dependency arrows.
-    - critical_path: ordered sequence of critical activity IDs.
     """
-    return project_service.compute_network(db, project_id)
+    return project_service.get_project_network(db, project_id)
 
 
 @router.get("/{project_id}/pert")
-def get_project_pert_analysis(
+def get_project_pert(
     project_id: UUID,
     db: Session = Depends(get_db)
 ):
     """
-    Returns PERT expected duration, project variance,
-    and probability of completing the project on time
-    if target_completion_date is set.
+    Computes PERT expected duration, variance, and standard deviation.
     """
-    return project_service.compute_pert_analysis(db, project_id)
+    return project_service.get_project_pert(db, project_id)
 
 
-@router.post(
-    "/{project_id}/simulate",
-    response_model=SimulationResponse
-)
-def simulate_project_change(
+@router.post("/{project_id}/simulate", response_model=SimulationResponse)
+def simulate_project(
     project_id: UUID,
-    request: SimulationRequest,
+    sim_in: SimulationRequest,
     db: Session = Depends(get_db)
 ):
     """
-    Accepts a hypothetical change to an activity's duration,
-    estimates, or dependencies and returns the recomputed
-    network delta without committing the change.
+    Simulates a "What-If" scenario for a single activity's duration.
     """
-    return project_service.simulate_change(
-        db,
-        project_id,
-        request
-    )
+    return project_service.simulate_project(db, project_id, sim_in)
 
 
 @router.post(
     "/{project_id}/crash",
-    response_model=ProjectCrashResponse
+    response_model=ProjectCrashResponse,
+    dependencies=[Depends(require_admin_role)]
 )
-def crash_project_schedule(
+def crash_project(
     project_id: UUID,
-    request: ProjectCrashRequest,
+    crash_in: ProjectCrashRequest,
     db: Session = Depends(get_db)
 ):
     """
-    Performs optimal project crashing / duration compression
-    based on cost per day.
+    Applies the linear schedule crashing algorithm (Admin Only).
     """
-    return project_service.crash_project(
-        db,
-        project_id,
-        request
-    )
+    return project_service.crash_project(db, project_id, crash_in)
 
 
-@router.post(
-    "/{project_id}/monte-carlo",
-    response_model=MonteCarloResponse
-)
-def run_monte_carlo_simulation(
+@router.post("/{project_id}/monte-carlo", response_model=MonteCarloResponse)
+def run_monte_carlo(
     project_id: UUID,
-    request: MonteCarloRequest,
+    mc_in: MonteCarloRequest,
     db: Session = Depends(get_db)
 ):
     """
-    Runs Monte Carlo PERT simulation and S-Curve risk analysis.
+    Runs a Monte Carlo risk simulation for a PERT project.
     """
-    return project_service.run_monte_carlo_simulation(
-        db,
-        project_id,
-        request
-    )
+    return project_service.run_monte_carlo(db, project_id, mc_in)
 
 
 @router.post(
     "/template/{template_name}",
     response_model=ProjectWithActivitiesResponse,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin_role)]
 )
 def create_project_from_template(
     template_name: str,
     db: Session = Depends(get_db)
 ):
     """
-    Creates a new project pre-populated from an industry template.
-
-    Examples:
-    - WEDDING_STANDARD
-    - TECH_CONFERENCE
+    Creates a new project pre-populated from an industry template (Admin Only).
     """
     return project_service.create_project_from_template(
         db,
