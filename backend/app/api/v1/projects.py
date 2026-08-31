@@ -1,7 +1,7 @@
 from uuid import UUID
 from typing import List, Dict
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -19,7 +19,7 @@ from app.schemas.crashing import ProjectCrashRequest, ProjectCrashResponse
 from app.schemas.monte_carlo import MonteCarloRequest, MonteCarloResponse
 from app.schemas.availability import AvailabilityCheckResponse
 
-from app.services import project_service
+from app.services import project_service, export_service
 
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -190,4 +190,44 @@ def check_vendor_availability(
     return project_service.check_vendor_availability(
         db,
         project_id
+    )
+
+
+@router.get("/{project_id}/export/csv")
+def export_project_csv(
+    project_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Exports complete project schedule, CPM floats, PERT calculations,
+    crashing options, and vendor assignments to a CSV file.
+    """
+    csv_content = export_service.generate_project_csv(db, project_id)
+    filename = f"eventpath_project_{project_id}_export.csv"
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
+
+
+@router.get("/{project_id}/export/pdf")
+def export_project_pdf(
+    project_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Generates and exports a styled publication-grade PDF report
+    for the project schedule and risk analysis.
+    """
+    pdf_bytes = export_service.generate_project_pdf(db, project_id)
+    filename = f"eventpath_project_{project_id}_report.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
     )

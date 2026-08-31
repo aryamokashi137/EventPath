@@ -18,6 +18,8 @@ class ActivityNode:
     duration: float
     predecessors: Set[str] = field(default_factory=set)
     successors: Set[str] = field(default_factory=set)
+    predecessor_specs: List[Dict] = field(default_factory=list)  # [{pred_id, dependency_type, lag}]
+    successor_specs: List[Dict] = field(default_factory=list)    # [{succ_id, dependency_type, lag}]
     es: float = 0.0
     ef: float = 0.0
     ls: float = 0.0
@@ -51,9 +53,6 @@ def detect_cycles_and_sort(
         for v in nodes[u].successors:
             if visited[v] == 1:
                 # Cycle detected!
-                # Reconstruct the cycle starting and ending at v
-                cycle_path = []
-                # Find the index of v in the stack
                 try:
                     idx = temp_stack.index(v)
                     cycle_path = temp_stack[idx:] + [v]
@@ -78,16 +77,13 @@ def detect_cycles_and_sort(
                 cycle_names = [nodes[cid].name for cid in cycle]
                 raise CycleDetectedError(cycle, cycle_names)
 
-    # Kahn's algorithm or simple in-degree based topological sort for Fulkerson numbering
-    # This also guarantees that every edge goes from a lower-numbered to a higher-numbered node
+    # Kahn's algorithm
     in_degree = {node_id: 0 for node_id in nodes}
     for node_id, node in nodes.items():
         for succ in node.successors:
             in_degree[succ] += 1
 
-    # Queue of nodes with no predecessors
     queue = [node_id for node_id in nodes if in_degree[node_id] == 0]
-    # Keep queue sorted for deterministic results (e.g. START first, then alphabetically or by ID)
     queue.sort(key=lambda x: (x != "START", x))
 
     topo_order = []
@@ -98,7 +94,6 @@ def detect_cycles_and_sort(
             in_degree[v] -= 1
             if in_degree[v] == 0:
                 queue.append(v)
-                # Keep queue deterministic
                 queue.sort(key=lambda x: (x != "START", x == "END", x))
 
     return topo_order
@@ -109,7 +104,7 @@ def build_network(
 ) -> Dict[str, ActivityNode]:
     """
     Builds the ActivityNode network including virtual START and END nodes.
-    `duration_key` allows specifying whether to use 'duration' or 'expected_time'.
+    Supports FS, SS, FF, SF dependency types and lag calculations.
     """
     nodes: Dict[str, ActivityNode] = {}
     
@@ -124,16 +119,34 @@ def build_network(
             variance=act.get("variance")
         )
 
-    # 2. Add predecessors and successors
+    # 2. Add predecessors and successors with dependency types (FS, SS, FF, SF) & lag
     for act in activities:
         node_id = str(act["id"])
-        pred_ids = act.get("predecessor_ids", [])
-        for p_id in pred_ids:
-            p_id_str = str(p_id)
+        raw_deps = act.get("dependencies")
+        if raw_deps is None:
+            pred_ids = act.get("predecessor_ids", [])
+            raw_deps = [{"predecessor_id": str(p_id), "dependency_type": "FS", "lag": 0.0} for p_id in pred_ids]
+
+        for dep in raw_deps:
+            p_id_str = str(dep.get("predecessor_id") or dep.get("pred_id"))
+            dep_type = (dep.get("dependency_type") or "FS").upper()
+            lag = float(dep.get("lag") or 0.0)
+
             if p_id_str not in nodes:
                 raise ValueError(f"Predecessor activity with ID {p_id_str} not found in the project.")
             nodes[node_id].predecessors.add(p_id_str)
             nodes[p_id_str].successors.add(node_id)
+
+            nodes[node_id].predecessor_specs.append({
+                "pred_id": p_id_str,
+                "dependency_type": dep_type,
+                "lag": lag
+            })
+            nodes[p_id_str].successor_specs.append({
+                "succ_id": node_id,
+                "dependency_type": dep_type,
+                "lag": lag
+            })
 
     # 3. Create virtual START and END nodes
     start_node = ActivityNode(id="START", name="Start", duration=0.0)
@@ -149,6 +162,8 @@ def build_network(
         if not node.predecessors:
             node.predecessors.add("START")
             start_node.successors.add(node_id)
+            node.predecessor_specs.append({"pred_id": "START", "dependency_type": "FS", "lag": 0.0})
+            start_node.successor_specs.append({"succ_id": node_id, "dependency_type": "FS", "lag": 0.0})
 
     # Connect nodes with no successors to END
     for node_id, node in list(nodes.items()):
@@ -157,11 +172,16 @@ def build_network(
         if not node.successors:
             node.successors.add("END")
             end_node.predecessors.add(node_id)
+            node.successor_specs.append({"succ_id": "END", "dependency_type": "FS", "lag": 0.0})
+            end_node.predecessor_specs.append({"pred_id": node_id, "dependency_type": "FS", "lag": 0.0})
 
     # Special case: empty project
     if len(nodes) == 2:
         start_node.successors.add("END")
         end_node.predecessors.add("START")
+        start_node.successor_specs.append({"succ_id": "END", "dependency_type": "FS", "lag": 0.0})
+        end_node.predecessor_specs.append({"pred_id": "START", "dependency_type": "FS", "lag": 0.0})
+
 
     return nodes
 
@@ -170,7 +190,7 @@ def run_cpm_passes(
     nodes: Dict[str, ActivityNode], topo_order: List[str]
 ) -> List[str]:
     """
-    Executes forward and backward passes.
+    Executes forward and backward passes considering FS, SS, FF, SF relationships & lag.
     Returns the critical path as a sequence of activity IDs from START to END.
     """
     # 1. Forward Pass: Earliest Start (ES) and Earliest Finish (EF)
@@ -180,7 +200,25 @@ def run_cpm_passes(
             node.es = 0.0
             node.ef = 0.0
         else:
-            node.es = max(nodes[p_id].ef for p_id in node.predecessors)
+            max_es = 0.0
+            if node.predecessor_specs:
+                for spec in node.predecessor_specs:
+                    p = nodes[spec["pred_id"]]
+                    dep_type = spec["dependency_type"]
+                    lag = spec["lag"]
+                    if dep_type == "FS":
+                        req_es = p.ef + lag
+                    elif dep_type == "SS":
+                        req_es = p.es + lag
+                    elif dep_type == "FF":
+                        req_es = p.ef + lag - node.duration
+                    elif dep_type == "SF":
+                        req_es = p.es + lag - node.duration
+                    else:
+                        req_es = p.ef + lag
+                    if req_es > max_es:
+                        max_es = req_es
+            node.es = max(0.0, max_es)
             node.ef = node.es + node.duration
 
     # Project duration is EF of END node
@@ -193,8 +231,27 @@ def run_cpm_passes(
             node.lf = project_duration
             node.ls = project_duration
         else:
-            node.lf = min(nodes[s_id].ls for s_id in node.successors)
+            min_lf = project_duration
+            if node.successor_specs:
+                for spec in node.successor_specs:
+                    s = nodes[spec["succ_id"]]
+                    dep_type = spec["dependency_type"]
+                    lag = spec["lag"]
+                    if dep_type == "FS":
+                        req_lf = s.ls - lag
+                    elif dep_type == "SS":
+                        req_lf = s.ls - lag + node.duration
+                    elif dep_type == "FF":
+                        req_lf = s.lf - lag
+                    elif dep_type == "SF":
+                        req_lf = s.lf - lag + node.duration
+                    else:
+                        req_lf = s.ls - lag
+                    if req_lf < min_lf:
+                        min_lf = req_lf
+            node.lf = min_lf
             node.ls = node.lf - node.duration
+
 
     # 3. Calculate float/slack and determine if critical
     # We use a small epsilon for float comparison to handle floating point precision

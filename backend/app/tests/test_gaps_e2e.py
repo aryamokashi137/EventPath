@@ -1,36 +1,10 @@
 import pytest
 from datetime import date, timedelta
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from app.main import app
-from app.db.base import Base
-from app.db.session import get_db
 
-# Setup test SQLite database
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_gaps.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+def test_gap1_free_float_and_network(client: TestClient):
 
-def override_get_db():
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-app.dependency_overrides[get_db] = override_get_db
-
-@pytest.fixture(autouse=True)
-def setup_database():
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
-
-client = TestClient(app)
-
-def test_gap1_free_float_and_network():
     """Gap 1: Verify total float, free float, and interfering float calculations in network endpoint."""
     proj_resp = client.post("/api/v1/projects", json={"name": "Float Test", "mode": "CPM"})
     assert proj_resp.status_code == 201
@@ -63,7 +37,8 @@ def test_gap1_free_float_and_network():
     assert nodes_by_id[a_id]["is_critical"] is True
 
 
-def test_gap2_project_crashing_optimization():
+def test_gap2_project_crashing_optimization(client: TestClient):
+
     """Gap 2: Test schedule crashing endpoint for cost-optimal duration reduction."""
     proj_resp = client.post("/api/v1/projects", json={"name": "Crash Test", "mode": "CPM"})
     pid = proj_resp.json()["id"]
@@ -97,7 +72,7 @@ def test_gap2_project_crashing_optimization():
     assert res["additional_crash_cost"] == 600.0  # 3 days * 200/day for Task A
 
 
-def test_gap3_monte_carlo_simulation():
+def test_gap3_monte_carlo_simulation(client: TestClient):
     """Gap 3: Test Monte Carlo PERT simulation & S-Curve risk analysis."""
     proj_resp = client.post("/api/v1/projects", json={"name": "Monte Carlo Test", "mode": "PERT"})
     pid = proj_resp.json()["id"]
@@ -119,7 +94,7 @@ def test_gap3_monte_carlo_simulation():
     assert len(res["criticality_indices"]) > 0
 
 
-def test_gap4_event_templates():
+def test_gap4_event_templates(client: TestClient):
     """Gap 4: Test pre-built event template instantiation."""
     tpl_resp = client.post("/api/v1/projects/template/WEDDING_STANDARD")
     assert tpl_resp.status_code == 201
@@ -130,7 +105,8 @@ def test_gap4_event_templates():
     assert len(data["activities"]) >= 8
 
 
-def test_gap5_vendor_availability_checks():
+def test_gap5_vendor_availability_checks(client: TestClient):
+
     """Gap 5: Test vendor availability and overbooking verification engine."""
     proj_resp = client.post("/api/v1/projects", json={"name": "Vendor Test", "mode": "CPM"})
     pid = proj_resp.json()["id"]

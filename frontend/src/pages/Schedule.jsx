@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   CalendarDays,
   Clock3,
@@ -8,8 +8,15 @@ import {
   CheckCircle,
   Layers,
   Filter,
+  Edit,
+  Plus,
+  Minus,
 } from "lucide-react";
 import { getProjects, getProjectNetwork } from "../services/projectService";
+import { updateActivity } from "../services/activityService";
+import ExportButtons from "../components/ExportButtons";
+import ActivityEditModal from "../components/ActivityEditModal";
+
 
 function Schedule() {
   const [projects, setProjects] = useState([]);
@@ -22,81 +29,100 @@ function Schedule() {
   const [masterActivities, setMasterActivities] = useState([]);
   const [categories, setCategories] = useState([]);
 
-  useEffect(() => {
-    const loadScheduleData = async () => {
-      try {
-        setLoading(true);
-        const projectList = await getProjects();
-        setProjects(projectList);
+  // Interactive Gantt Editing Modal State
+  const [editingActivity, setEditingActivity] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-        // Fetch network details for all projects concurrently to compute ES, EF, Float, and timelines
-        const networkPromises = projectList.map(async (p) => {
-          try {
-            const network = await getProjectNetwork(p.id);
-            return { project: p, network };
-          } catch {
-            return { project: p, network: null };
-          }
-        });
+  const loadScheduleData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const projectList = await getProjects();
+      setProjects(projectList);
 
-        const results = await Promise.all(networkPromises);
-        const aggregated = [];
-        const catSet = new Set();
+      // Fetch network details for all projects concurrently to compute ES, EF, Float, and timelines
+      const networkPromises = projectList.map(async (p) => {
+        try {
+          const network = await getProjectNetwork(p.id);
+          return { project: p, network };
+        } catch {
+          return { project: p, network: null };
+        }
+      });
 
-        results.forEach(({ project, network }) => {
-          if (!network || !network.nodes) return;
+      const results = await Promise.all(networkPromises);
+      const aggregated = [];
+      const catSet = new Set();
 
-          // Compute baseline date from project start_date or today
-          const baseDate = project.start_date ? new Date(project.start_date) : new Date();
+      results.forEach(({ project, network }) => {
+        if (!network || !network.nodes) return;
 
-          network.nodes.forEach((node) => {
-            if (node.id === "START" || node.id === "END") return;
+        // Compute baseline date from project start_date or today
+        const baseDate = project.start_date ? new Date(project.start_date) : new Date();
 
-            const category = (node.category || "GENERAL").toUpperCase();
-            catSet.add(category);
+        network.nodes.forEach((node) => {
+          if (node.id === "START" || node.id === "END") return;
 
-            const esDays = node.es || 0;
-            const durationDays = node.duration || 0;
-            const efDays = node.ef || (esDays + durationDays);
+          const category = (node.category || "GENERAL").toUpperCase();
+          catSet.add(category);
 
-            const startDate = new Date(baseDate);
-            startDate.setDate(startDate.getDate() + Math.round(esDays));
+          const esDays = node.es || 0;
+          const durationDays = node.duration || 0;
+          const efDays = node.ef || (esDays + durationDays);
 
-            const finishDate = new Date(baseDate);
-            finishDate.setDate(finishDate.getDate() + Math.round(efDays));
+          const startDate = new Date(baseDate);
+          startDate.setDate(startDate.getDate() + Math.round(esDays));
 
-            aggregated.push({
-              id: node.id,
-              name: node.name,
-              projectId: project.id,
-              projectName: project.name,
-              projectMode: project.mode,
-              category,
-              duration: durationDays,
-              es: esDays,
-              ef: efDays,
-              slack: node.slack || 0,
-              is_critical: Boolean(node.is_critical),
-              vendorName: node.vendor_name || "",
-              vendorFrom: node.vendor_available_from || "",
-              vendorTo: node.vendor_available_to || "",
-              startDateStr: startDate.toISOString().split("T")[0],
-              finishDateStr: finishDate.toISOString().split("T")[0],
-            });
+          const finishDate = new Date(baseDate);
+          finishDate.setDate(finishDate.getDate() + Math.round(efDays));
+
+          aggregated.push({
+            id: node.id,
+            name: node.name,
+            projectId: project.id,
+            projectName: project.name,
+            projectMode: project.mode,
+            category,
+            duration: durationDays,
+            es: esDays,
+            ef: efDays,
+            slack: node.slack || 0,
+            is_critical: Boolean(node.is_critical),
+            vendorName: node.vendor_name || "",
+            vendorFrom: node.vendor_available_from || "",
+            vendorTo: node.vendor_available_to || "",
+            startDateStr: startDate.toISOString().split("T")[0],
+            finishDateStr: finishDate.toISOString().split("T")[0],
+            dependencies: node.dependencies || [],
           });
         });
+      });
 
-        setMasterActivities(aggregated);
-        setCategories(Array.from(catSet));
-      } catch (err) {
-        console.error("Error loading portfolio schedule:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadScheduleData();
+      setMasterActivities(aggregated);
+      setCategories(Array.from(catSet));
+    } catch (err) {
+      console.error("Error loading portfolio schedule:", err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadScheduleData();
+  }, [loadScheduleData]);
+
+  const handleQuickDurationChange = async (e, act, delta) => {
+    e.stopPropagation();
+    const newDuration = Math.max(0.5, (act.duration || 1) + delta);
+    try {
+      await updateActivity(act.projectId, act.id, {
+        name: act.name,
+        duration: newDuration,
+      });
+      loadScheduleData();
+    } catch (err) {
+      console.error("Quick duration change failed:", err);
+    }
+  };
 
   // Filter activities
   const filteredActivities = masterActivities.filter((act) => {
@@ -119,7 +145,7 @@ function Schedule() {
   }
 
   return (
-    <div className="dashboard-page">
+    <div className="dashboard-page" id="schedule-page-container">
       {/* Hero Header */}
       <section className="dashboard-hero">
         <div>
@@ -130,7 +156,13 @@ function Schedule() {
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: "10px" }}>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          <ExportButtons
+            projectId={selectedProjectId !== "ALL" ? selectedProjectId : null}
+            projectName={selectedProjectId !== "ALL" ? projects.find(p => p.id === selectedProjectId)?.name || "Schedule" : "Master_Schedule"}
+            targetElementId="schedule-page-container"
+          />
+
           <button
             className={`primary-button ${activeView === "gantt" ? "" : "secondary-action"}`}
             style={{ background: activeView === "gantt" ? "var(--accent)" : "var(--bg-card)", color: activeView === "gantt" ? "#fff" : "var(--text-secondary)", border: "1px solid var(--border-color)" }}
@@ -143,10 +175,11 @@ function Schedule() {
             style={{ background: activeView === "vendor" ? "var(--accent)" : "var(--bg-card)", color: activeView === "vendor" ? "#fff" : "var(--text-secondary)", border: "1px solid var(--border-color)" }}
             onClick={() => setActiveView("vendor")}
           >
-            <Users size={17} /> Vendor Schedule (Gap 5)
+            <Users size={17} /> Vendor Schedule
           </button>
         </div>
       </section>
+
 
       {/* Control Bar: Project Switcher & Filters */}
       <section style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "center", background: "var(--bg-card)", padding: "16px", borderRadius: "12px", border: "1px solid var(--border-color)", boxShadow: "var(--shadow-md)" }}>
@@ -256,9 +289,9 @@ function Schedule() {
           ) : (
             <div style={{ overflowX: "auto" }}>
               {/* Gantt Header Days Axis */}
-              <div style={{ display: "grid", gridTemplateColumns: "280px 100px 120px 1fr", gap: "16px", paddingBottom: "12px", borderBottom: "2px solid var(--border-color)", fontWeight: 700, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "280px 130px 120px 1fr", gap: "16px", paddingBottom: "12px", borderBottom: "2px solid var(--border-color)", fontWeight: 700, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
                 <div>Activity & Project</div>
-                <div>Duration</div>
+                <div>Duration (Edit)</div>
                 <div>ES → EF</div>
                 <div style={{ display: "flex", justifyContent: "space-between", paddingLeft: "10px" }}>
                   <span>Day 0</span>
@@ -282,7 +315,7 @@ function Schedule() {
                       key={`${act.projectId}-${act.id}`}
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "280px 100px 120px 1fr",
+                        gridTemplateColumns: "280px 130px 120px 1fr",
                         gap: "16px",
                         alignItems: "center",
                         padding: "10px 0",
@@ -308,9 +341,64 @@ function Schedule() {
                         </div>
                       </div>
 
-                      {/* Duration */}
-                      <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-primary)" }}>
-                        {formattedDuration}
+                      {/* Interactive Duration & Edit Button */}
+                      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                        <button
+                          onClick={(e) => handleQuickDurationChange(e, act, -1)}
+                          title="Decrease duration by 1 day"
+                          style={{
+                            padding: "2px 4px",
+                            borderRadius: "4px",
+                            border: "1px solid var(--border-color)",
+                            background: "var(--bg-main)",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                          }}
+                        >
+                          <Minus size={12} />
+                        </button>
+                        <span style={{ fontSize: "0.85rem", fontWeight: 700, minWidth: "26px", textAlign: "center" }}>
+                          {formattedDuration}
+                        </span>
+                        <button
+                          onClick={(e) => handleQuickDurationChange(e, act, 1)}
+                          title="Increase duration by 1 day"
+                          style={{
+                            padding: "2px 4px",
+                            borderRadius: "4px",
+                            border: "1px solid var(--border-color)",
+                            background: "var(--bg-main)",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                          }}
+                        >
+                          <Plus size={12} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingActivity(act);
+                            setIsModalOpen(true);
+                          }}
+                          title="Edit task details & dependencies"
+                          style={{
+                            padding: "3px 5px",
+                            borderRadius: "4px",
+                            border: "none",
+                            background: "rgba(99, 102, 241, 0.12)",
+                            color: "var(--accent)",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "2px",
+                            fontSize: "0.75rem",
+                            fontWeight: 600,
+                            marginLeft: "2px",
+                          }}
+                        >
+                          <Edit size={13} />
+                        </button>
                       </div>
 
                       {/* ES -> EF */}
@@ -322,6 +410,10 @@ function Schedule() {
                       <div style={{ position: "relative", height: "28px", background: "var(--bg-main)", borderRadius: "6px", overflow: "hidden", display: "flex", alignItems: "center", border: "1px solid var(--border-color)" }}>
                         {/* Task Duration Bar */}
                         <div
+                          onClick={() => {
+                            setEditingActivity(act);
+                            setIsModalOpen(true);
+                          }}
                           style={{
                             position: "absolute",
                             left: `${startPct}%`,
@@ -341,8 +433,9 @@ function Schedule() {
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             zIndex: 2,
+                            cursor: "pointer",
                           }}
-                          title={`Task: ${act.name} | ES: ${Number(act.es).toFixed(1)}d, EF: ${Number(act.ef).toFixed(1)}d`}
+                          title={`Click to edit | Task: ${act.name} | ES: ${Number(act.es).toFixed(1)}d, EF: ${Number(act.ef).toFixed(1)}d`}
                         >
                           {durationPct > 7 ? formattedDuration : ""}
                         </div>
@@ -428,6 +521,21 @@ function Schedule() {
           </div>
         </section>
       )}
+
+      {/* Interactive Gantt Quick-Edit Modal */}
+      <ActivityEditModal
+        projectId={editingActivity?.projectId}
+        activity={editingActivity}
+        allActivities={masterActivities.filter((a) => a.projectId === editingActivity?.projectId)}
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingActivity(null);
+        }}
+        onSaveSuccess={() => {
+          loadScheduleData();
+        }}
+      />
     </div>
   );
 }

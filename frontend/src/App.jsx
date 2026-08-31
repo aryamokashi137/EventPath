@@ -26,6 +26,8 @@ import { useAuth } from "./context/AuthContext";
 import Dashboard from "./pages/Dashboard";
 import Projects from "./pages/Projects";
 import ProjectDetails from "./pages/ProjectDetails";
+import NotificationCenter from "./components/NotificationCenter";
+
 
 import "./App.css";
 
@@ -218,7 +220,11 @@ function App() {
           </div>
 
           <div className="topbar-status">
+            {/* Real-time Notification Center */}
+            <NotificationCenter />
+
             {/* Role Switcher Toggle */}
+
             <button
               type="button"
               onClick={toggleRole}

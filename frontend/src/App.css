@@ -3264,3 +3264,72 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* =========================================
+   EXPORT BUTTONS & PRINT MEDIA STYLING
+   ========================================= */
+
+.btn-export-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35) !important;
+}
+
+.btn-export-secondary:hover:not(:disabled),
+.btn-export-dropdown-toggle:hover {
+  background: var(--bg-hover, #f1f5f9) !important;
+  border-color: var(--accent-light, #cbd5e1) !important;
+}
+
+.export-dropdown-menu .dropdown-item:hover {
+  background: rgba(99, 102, 241, 0.08) !important;
+}
+
+@media print {
+  /* Hide non-printable UI controls */
+  .app-sidebar,
+  .topbar,
+  .sidebar-overlay,
+  .mobile-close-button,
+  .mobile-menu-button,
+  .export-buttons-wrapper,
+  .analysis-back-button,
+  .network-button,
+  .activity-form,
+  .simulation-form,
+  .crash-form,
+  button {
+    display: none !important;
+  }
+
+  body, html, #root, .app-shell, .app-main, .page-container {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .analysis-page,
+  .project-details-page,
+  .schedule-page,
+  .network-page,
+  .analytics-page {
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .analysis-panel,
+  .analysis-stat-card,
+  .pert-result-card,
+  .crash-result-card,
+  .project-details-page > section {
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+  }
+
+  .analysis-table-wrapper, table {
+    width: 100% !important;
+    overflow: visible !important;
+  }
+}

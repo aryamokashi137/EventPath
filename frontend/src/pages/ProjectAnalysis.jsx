@@ -19,6 +19,8 @@ import {
   Tooltip,
 } from "recharts";
 
+import ExportButtons from "../components/ExportButtons";
+
 import {
   getProject,
   getProjectNetwork,
@@ -28,6 +30,7 @@ import {
   runMonteCarlo,
   checkVendorAvailability,
 } from "../services/projectService";
+
 
 function ProjectAnalysis() {
   const { projectId } = useParams();
@@ -308,7 +311,7 @@ const availableTime =
       .map((activity) => activity.name);
 
   return (
-    <div className="analysis-page">
+    <div className="analysis-page" id="project-analysis-container">
 
       {/* Header */}
 
@@ -341,12 +344,21 @@ const availableTime =
           </div>
         </div>
 
-        <div className="analysis-mode-badge">
-          <Network size={16} />
-          {project.mode}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <ExportButtons
+            projectId={projectId}
+            projectName={project.name}
+            targetElementId="project-analysis-container"
+          />
+
+          <div className="analysis-mode-badge">
+            <Network size={16} />
+            {project.mode}
+          </div>
         </div>
 
       </header>
+
 
       {/* Summary Cards */}
 

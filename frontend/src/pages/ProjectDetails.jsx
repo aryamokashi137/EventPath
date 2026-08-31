@@ -8,8 +8,10 @@ import {
   deleteActivity,
 } from "../services/activityService";
 import { useAuth } from "../context/AuthContext";
+import ExportButtons from "../components/ExportButtons";
 
 function ProjectDetails() {
+
   const { projectId } = useParams();
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
@@ -374,69 +376,62 @@ function ProjectDetails() {
 
 
   return (
-    <div className="project-details-page">
+    <div className="project-details-page" id="project-details-container">
 
-      {}
-      <button
-        type="button"
-        onClick={() => navigate("/")}
-      >
-        ← Back to Projects
-      </button>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <button
+          type="button"
+          onClick={() => navigate("/projects")}
+        >
+          ← Back to Projects
+        </button>
 
-<button
-  type="button"
-  className="analyze-project-button"
-  onClick={() =>
-    navigate(`/projects/${projectId}/analysis`)
-  }
->
-  Analyze Project →
-</button>
-      {}
-      <header className="project-header">
-  <div>
-    <h1>{project.name}</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button
+            type="button"
+            className="analyze-project-button"
+            onClick={() =>
+              navigate(`/projects/${projectId}/analysis`)
+            }
+          >
+            Analyze Project →
+          </button>
+        </div>
+      </div>
 
-    <p>
-      {project.description ||
-        "Plan, schedule, and analyze your event."}
-    </p>
-  </div>
+      <header className="project-details-header">
+        <div>
+          <span className="page-eyebrow">
+            PROJECT WORKSPACE
+          </span>
 
-  <div className="project-header-actions">
+          <h1>{project.name}</h1>
 
+          <p>
+            {project.description ||
+              "Plan and manage your project activities."}
+          </p>
+        </div>
 
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <ExportButtons
+            projectId={projectId}
+            projectName={project.name}
+            targetElementId="project-details-container"
+          />
 
-  </div>
-</header>
+          <button
+            type="button"
+            onClick={() =>
+              navigate(`/projects/${projectId}/network`)
+            }
+            className="network-button"
+          >
+            View CPM Network →
+          </button>
+        </div>
+      </header>
 
-<header className="project-details-header">
-
-  <div>
-    <span className="page-eyebrow">
-      PROJECT WORKSPACE
-    </span>
-
-    <h1>{project.name}</h1>
-
-    <p>
-      {project.description ||
-        "Plan and manage your project activities."}
-    </p>
-  </div>
-
-  <button
-    type="button"
-    onClick={() =>
-      navigate(`/projects/${projectId}/network`)
-    }
-    className="network-button"
-  >
-    View CPM Network →
-  </button>
-
-</header>
       {}
       <section>
         <h2>Project Information</h2>

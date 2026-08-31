@@ -1,18 +1,36 @@
+import asyncio
 from uuid import UUID
 from datetime import date
 from typing import List, Dict, Tuple, Optional, Set
 
 from sqlalchemy.orm import Session
+from sqlalchemy import select, delete, insert
 from fastapi import HTTPException, status
 
 from app.models.project import Project
-from app.models.activity import Activity
+from app.models.activity import Activity, activity_dependencies
 from app.schemas.project import ProjectCreate, ProjectUpdate
-from app.schemas.activity import ActivityCreate, ActivityUpdate
+from app.schemas.activity import ActivityCreate, ActivityUpdate, DependencySpec
 from app.schemas.simulation import SimulationRequest, SimulationResponse
 from app.schemas.crashing import ProjectCrashRequest, ProjectCrashResponse
 from app.schemas.monte_carlo import MonteCarloRequest, MonteCarloResponse
 from app.services import cpm_engine
+from app.core.websocket import ws_manager
+
+
+def notify_ws_update(project_id: UUID, event_type: str, details: Optional[Dict] = None):
+    """Broadcasting helper to push real-time project updates to connected WebSocket clients."""
+    try:
+        payload = {
+            "event": event_type,
+            "project_id": str(project_id),
+            "details": details or {}
+        }
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(ws_manager.broadcast(str(project_id), payload))
+    except Exception:
+        pass
 
 
 def get_project_or_404(db: Session, project_id: UUID) -> Project:
@@ -67,18 +85,88 @@ def update_project(db: Session, project_id: UUID, project_in: ProjectUpdate) -> 
             setattr(project, field, value)
     db.commit()
     db.refresh(project)
+    notify_ws_update(project_id, "PROJECT_UPDATED", {"project_id": str(project_id)})
     return project
 
 def delete_project(db: Session, project_id: UUID) -> None:
     project = get_project_or_404(db, project_id)
     db.delete(project)
     db.commit()
+    notify_ws_update(project_id, "PROJECT_DELETED", {"project_id": str(project_id)})
+
+
+def _process_dependency_inputs(
+    db: Session,
+    project_id: UUID,
+    activity_id: Optional[UUID],
+    dependencies_input: Optional[List[DependencySpec]],
+    predecessor_ids_input: Optional[List[UUID]]
+) -> Tuple[List[Activity], List[Dict]]:
+    """Helper to validate and construct dependency structures."""
+    raw_deps = []
+    
+    if dependencies_input is not None:
+        for dep in dependencies_input:
+            raw_deps.append({
+                "predecessor_id": dep.predecessor_id,
+                "dependency_type": dep.dependency_type.upper(),
+                "lag": float(dep.lag)
+            })
+    elif predecessor_ids_input is not None:
+        for p_id in predecessor_ids_input:
+            raw_deps.append({
+                "predecessor_id": p_id,
+                "dependency_type": "FS",
+                "lag": 0.0
+            })
+
+    predecessors = []
+    processed_deps = []
+    
+    for dep in raw_deps:
+        pred_id = dep["predecessor_id"]
+        if activity_id and pred_id == activity_id:
+            raise HTTPException(
+                status_code=400,
+                detail="An activity cannot depend on itself."
+            )
+        pred = db.query(Activity).filter(Activity.id == pred_id).first()
+        if not pred:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Predecessor activity with ID {pred_id} not found."
+            )
+        if pred.project_id != project_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Predecessor activity {pred_id} belongs to a different project."
+            )
+        predecessors.append(pred)
+        processed_deps.append(dep)
+
+    return predecessors, processed_deps
+
+
+def _sync_activity_dependencies_table(db: Session, activity_id: UUID, processed_deps: List[Dict]):
+    """Sync explicit dependency_type and lag into the activity_dependencies association table."""
+    for dep in processed_deps:
+        db.execute(
+            activity_dependencies.update()
+            .where(
+                (activity_dependencies.c.activity_id == activity_id) &
+                (activity_dependencies.c.predecessor_activity_id == dep["predecessor_id"])
+            )
+            .values(
+                dependency_type=dep["dependency_type"],
+                lag=dep["lag"]
+            )
+        )
+
+
 
 def create_activity(db: Session, project_id: UUID, activity_in: ActivityCreate) -> Activity:
-    # Ensure project exists
     project = get_project_or_404(db, project_id)
     
-    # Verify project mode requirements
     if project.mode == "CPM" and activity_in.duration <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST if hasattr(status, "HTTP_400_BAD_REQUEST") else 400,
@@ -94,21 +182,9 @@ def create_activity(db: Session, project_id: UUID, activity_in: ActivityCreate) 
             detail="PERT time estimates (optimistic, most_likely, pessimistic) are required for PERT projects."
         )
 
-    # Check predecessors exist and belong to the same project
-    predecessors = []
-    for pred_id in activity_in.predecessor_ids:
-        pred = db.query(Activity).filter(Activity.id == pred_id).first()
-        if not pred:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Predecessor activity with ID {pred_id} not found."
-            )
-        if pred.project_id != project_id:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Predecessor activity {pred_id} belongs to a different project."
-            )
-        predecessors.append(pred)
+    predecessors, processed_deps = _process_dependency_inputs(
+        db, project_id, None, activity_in.dependencies, activity_in.predecessor_ids
+    )
 
     activity = Activity(
         project_id=project_id,
@@ -128,13 +204,12 @@ def create_activity(db: Session, project_id: UUID, activity_in: ActivityCreate) 
         predecessors=predecessors
     )
     db.add(activity)
-    
-    # Temp check for circular dependencies before committing
     db.flush()
+
+    _sync_activity_dependencies_table(db, activity.id, processed_deps)
+    
     try:
-        # Build in-memory list to dry run cycle detection
         activities_data = _prepare_cpm_input_from_db(db, project_id)
-        # Run cycle detection
         nodes = cpm_engine.build_network(activities_data)
         cpm_engine.detect_cycles_and_sort(nodes)
     except cpm_engine.CycleDetectedError as e:
@@ -149,6 +224,7 @@ def create_activity(db: Session, project_id: UUID, activity_in: ActivityCreate) 
 
     db.commit()
     db.refresh(activity)
+    notify_ws_update(project_id, "ACTIVITY_CREATED", {"activity_id": str(activity.id)})
     return activity
 
 def update_activity(db: Session, project_id: UUID, activity_id: UUID, activity_in: ActivityUpdate) -> Activity:
@@ -163,41 +239,24 @@ def update_activity(db: Session, project_id: UUID, activity_id: UUID, activity_i
 
     update_data = activity_in.model_dump(exclude_unset=True)
     
-    # Save current predecessors to rollback if circular dependency detected
-    old_predecessors = list(activity.predecessors)
+    deps_provided = "dependencies" in update_data or "predecessor_ids" in update_data
+    dependencies_input = update_data.pop("dependencies", None)
+    predecessor_ids_input = update_data.pop("predecessor_ids", None)
     
-    if "predecessor_ids" in update_data:
-        pred_ids = update_data.pop("predecessor_ids")
-        predecessors = []
-        for pred_id in pred_ids:
-            if pred_id == activity_id:
-                raise HTTPException(
-                    status_code=400,
-                    detail="An activity cannot depend on itself."
-                )
-            pred = db.query(Activity).filter(Activity.id == pred_id).first()
-            if not pred:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Predecessor activity with ID {pred_id} not found."
-                )
-            if pred.project_id != project_id:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Predecessor activity {pred_id} belongs to a different project."
-                )
-            predecessors.append(pred)
+    if deps_provided:
+        predecessors, processed_deps = _process_dependency_inputs(
+            db, project_id, activity_id, dependencies_input, predecessor_ids_input
+        )
         activity.predecessors = predecessors
+        _sync_activity_dependencies_table(db, activity.id, processed_deps)
 
     for field, value in update_data.items():
         setattr(activity, field, value)
 
-    # Validate that we still satisfy PERT bounds if updated
     if project.mode == "PERT":
         opt = activity.optimistic_time if activity.optimistic_time is not None else 0.0
         lk = activity.most_likely_time if activity.most_likely_time is not None else 0.0
         pes = activity.pessimistic_time if activity.pessimistic_time is not None else 0.0
-        # If some were updated and some weren't, we validate the merged state
         if not (opt <= lk <= pes):
             db.rollback()
             raise HTTPException(
@@ -206,7 +265,6 @@ def update_activity(db: Session, project_id: UUID, activity_id: UUID, activity_i
             )
 
     db.flush()
-    # Check for cycles
     try:
         activities_data = _prepare_cpm_input_from_db(db, project_id)
         nodes = cpm_engine.build_network(activities_data)
@@ -223,6 +281,7 @@ def update_activity(db: Session, project_id: UUID, activity_id: UUID, activity_i
 
     db.commit()
     db.refresh(activity)
+    notify_ws_update(project_id, "ACTIVITY_UPDATED", {"activity_id": str(activity.id)})
     return activity
 
 def delete_activity(db: Session, project_id: UUID, activity_id: UUID) -> None:
@@ -237,6 +296,8 @@ def delete_activity(db: Session, project_id: UUID, activity_id: UUID) -> None:
 
     db.delete(activity)
     db.commit()
+    notify_ws_update(project_id, "ACTIVITY_DELETED", {"activity_id": str(activity_id)})
+
 
 def compute_network(db: Session, project_id: UUID) -> Dict:
     project = get_project_or_404(db, project_id)
@@ -265,14 +326,26 @@ def compute_network(db: Session, project_id: UUID) -> Dict:
             "is_critical": node.is_critical
         })
 
-    # Format edges
+    # Format edges with dependency types (FS, SS, FF, SF) and lag
     edges = []
     for node_id, node in nodes.items():
-        for succ_id in node.successors:
-            edges.append({
-                "from_node": node_id,
-                "to_node": succ_id
-            })
+        if node.successor_specs:
+            for spec in node.successor_specs:
+                edges.append({
+                    "from_node": node_id,
+                    "to_node": spec["succ_id"],
+                    "dependency_type": spec.get("dependency_type", "FS"),
+                    "lag": spec.get("lag", 0.0)
+                })
+        else:
+            for succ_id in node.successors:
+                edges.append({
+                    "from_node": node_id,
+                    "to_node": succ_id,
+                    "dependency_type": "FS",
+                    "lag": 0.0
+                })
+
 
     # Convert critical path IDs to UUIDs (excluding virtual START and END)
     critical_path_uuids = [UUID(cid) for cid in critical_path]
@@ -391,10 +464,30 @@ def simulate_change(db: Session, project_id: UUID, request: SimulationRequest) -
 
 def _prepare_cpm_input_from_db(db: Session, project_id: UUID) -> List[Dict]:
     activities = db.query(Activity).filter(Activity.project_id == project_id).all()
+    act_ids = [act.id for act in activities]
+    
+    deps_by_act: Dict[str, List[Dict]] = {}
+    if act_ids:
+        stmt = select(activity_dependencies).where(activity_dependencies.c.activity_id.in_(act_ids))
+        dep_rows = db.execute(stmt).fetchall()
+        for row in dep_rows:
+            aid = str(row.activity_id)
+            pid = str(row.predecessor_activity_id)
+            dtype = getattr(row, 'dependency_type', 'FS') or 'FS'
+            lag_val = getattr(row, 'lag', 0.0) or 0.0
+            deps_by_act.setdefault(aid, []).append({
+                "predecessor_id": pid,
+                "dependency_type": str(dtype).upper(),
+                "lag": float(lag_val)
+            })
+
     activities_data = []
     for act in activities:
+        aid_str = str(act.id)
+        deps = deps_by_act.get(aid_str, [])
+        pred_ids = [d["predecessor_id"] for d in deps] if deps else [str(pred.id) for pred in act.predecessors]
         activities_data.append({
-            "id": str(act.id),
+            "id": aid_str,
             "name": act.name,
             "duration": act.duration,
             "optimistic_time": act.optimistic_time,
@@ -408,9 +501,11 @@ def _prepare_cpm_input_from_db(db: Session, project_id: UUID) -> List[Dict]:
             "is_milestone": act.is_milestone,
             "vendor_available_from": act.vendor_available_from,
             "vendor_available_to": act.vendor_available_to,
-            "predecessor_ids": [str(pred.id) for pred in act.predecessors]
+            "predecessor_ids": pred_ids,
+            "dependencies": deps
         })
     return activities_data
+
 
 
 def crash_project(db: Session, project_id: UUID, request: ProjectCrashRequest) -> Dict:
@@ -506,7 +601,8 @@ def check_vendor_availability(db: Session, project_id: UUID) -> Dict:
     project = get_project_or_404(db, project_id)
     activities_data = _prepare_cpm_input_from_db(db, project_id)
 
-    proj_start = project.start_date or (project.created_at.date() if project.created_at else date.today())
+    proj_start = project.start_date or date.today()
+
 
     if project.mode == "CPM":
         nodes, _, _ = cpm_engine.calculate_cpm(activities_data)

@@ -237,3 +237,75 @@ def test_rbac_authorization_enforcement(client: TestClient):
         headers={"X-User-Role": "ADMIN"}
     )
     assert response.status_code == 204
+
+
+def test_export_csv_and_pdf(client: TestClient):
+    # 1. Create project with activities
+    response = client.post(
+        "/api/v1/projects",
+        json={"name": "Export Test Project", "description": "Testing exports", "mode": "CPM"}
+    )
+    assert response.status_code == 201
+    project_id = response.json()["id"]
+
+    client.post(
+        f"/api/v1/projects/{project_id}/activities",
+        json={"name": "Activity 1", "duration": 4.0}
+    )
+
+    # 2. Test CSV Export
+    csv_res = client.get(f"/api/v1/projects/{project_id}/export/csv")
+    assert csv_res.status_code == 200
+    assert "text/csv" in csv_res.headers["content-type"]
+    assert "EVENTPATH PROJECT REPORT" in csv_res.text
+    assert "Export Test Project" in csv_res.text
+    assert "Activity 1" in csv_res.text
+
+    # 3. Test PDF Export
+    pdf_res = client.get(f"/api/v1/projects/{project_id}/export/pdf")
+    assert pdf_res.status_code == 200
+    assert "application/pdf" in pdf_res.headers["content-type"]
+    assert pdf_res.content.startswith(b"%PDF")
+
+
+def test_activity_dependency_types_and_websocket(client: TestClient):
+    # 1. Create project
+    proj_res = client.post("/api/v1/projects", json={"name": "Dep Types Test", "mode": "CPM"})
+    assert proj_res.status_code == 201
+    pid = proj_res.json()["id"]
+
+    # 2. Add Activity A
+    act_a = client.post(f"/api/v1/projects/{pid}/activities", json={"name": "Act A", "duration": 5.0}).json()
+    
+    # 3. Add Activity B with SS (Start-to-Start) dependency & 2d lag
+    act_b = client.post(f"/api/v1/projects/{pid}/activities", json={
+        "name": "Act B",
+        "duration": 4.0,
+        "dependencies": [
+            {"predecessor_id": act_a["id"], "dependency_type": "SS", "lag": 2.0}
+        ]
+    }).json()
+
+    assert len(act_b["dependencies"]) == 1
+    assert act_b["dependencies"][0]["dependency_type"] == "SS"
+    assert act_b["dependencies"][0]["lag"] == 2.0
+
+    # 4. Check network calculations with SS dependency
+    net_res = client.get(f"/api/v1/projects/{pid}/network")
+    assert net_res.status_code == 200
+    net_data = net_res.json()
+    
+    nodes_map = {n["id"]: n for n in net_data["nodes"]}
+    # Act A starts at 0, finishes at 5
+    # Act B starts at ES = A.es + lag = 0 + 2 = 2.0, finishes at 2 + 4 = 6.0
+    assert nodes_map[act_b["id"]]["es"] == 2.0
+    assert nodes_map[act_b["id"]]["ef"] == 6.0
+
+    # 5. Test WebSocket Connection & Ping/Pong
+    with client.websocket_connect(f"/api/v1/projects/{pid}/ws") as websocket:
+        websocket.send_text("ping")
+        data = websocket.receive_json()
+        assert data["type"] == "pong"
+        assert data["project_id"] == pid
+
+

@@ -3,6 +3,14 @@ from typing import Optional, List
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+class DependencySpec(BaseModel):
+    predecessor_id: UUID
+    dependency_type: str = Field("FS", description="Dependency relationship: FS (Finish-to-Start), SS (Start-to-Start), FF (Finish-to-Finish), SF (Start-to-Finish)")
+    lag: float = Field(0.0, description="Lag or lead time in days")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ActivityCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     duration: float = Field(0.0, description="Duration in CPM mode.")
@@ -25,6 +33,7 @@ class ActivityCreate(BaseModel):
     vendor_available_to: Optional[date] = Field(None, description="Vendor availability end date")
 
     predecessor_ids: List[UUID] = Field(default_factory=list, description="IDs of activities that this activity depends on.")
+    dependencies: Optional[List[DependencySpec]] = Field(None, description="Detailed dependency specs with type (FS/SS/FF/SF) and lag.")
 
     @model_validator(mode="after")
     def validate_estimates(self) -> "ActivityCreate":
@@ -60,6 +69,7 @@ class ActivityUpdate(BaseModel):
     vendor_available_to: Optional[date] = None
 
     predecessor_ids: Optional[List[UUID]] = None
+    dependencies: Optional[List[DependencySpec]] = None
 
     @model_validator(mode="after")
     def validate_estimates(self) -> "ActivityUpdate":
@@ -97,6 +107,8 @@ class ActivityResponse(BaseModel):
 
     created_at: datetime
     predecessor_ids: List[UUID] = Field(default_factory=list)
+    dependencies: List[DependencySpec] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
 

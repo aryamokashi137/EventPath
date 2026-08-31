@@ -10,6 +10,8 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/eventpath")
 
+from app.db.base import Base
+
 def seed_db():
     print(f"Connecting to database: {DATABASE_URL}")
     connect_args = {}
@@ -17,8 +19,10 @@ def seed_db():
         connect_args["check_same_thread"] = False
         
     engine = create_engine(DATABASE_URL, connect_args=connect_args)
+    Base.metadata.create_all(bind=engine)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = SessionLocal()
+
 
     try:
         # Check if sample project already exists

@@ -3,14 +3,14 @@ import uuid
 from datetime import datetime, date
 from typing import Optional, List
 
-from sqlalchemy import String, ForeignKey, Table, Column, DateTime, Date
+from sqlalchemy import String, ForeignKey, Table, Column, DateTime, Date, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 
 # Association table representing the many-to-many
-# self-referencing activity dependencies
+# self-referencing activity dependencies with dependency types (FS, SS, FF, SF) and lag
 activity_dependencies = Table(
     "activity_dependencies",
     Base.metadata,
@@ -24,7 +24,20 @@ activity_dependencies = Table(
         ForeignKey("activities.id", ondelete="CASCADE"),
         primary_key=True,
     ),
+    Column(
+        "dependency_type",
+        String(10),
+        default="FS",
+        nullable=False,
+    ),
+    Column(
+        "lag",
+        Float,
+        default=0.0,
+        nullable=False,
+    ),
 )
+
 
 
 class Activity(Base):
@@ -141,3 +154,22 @@ class Activity(Base):
     @property
     def predecessor_ids(self) -> List[uuid.UUID]:
         return [predecessor.id for predecessor in self.predecessors]
+
+    @property
+    def dependencies(self) -> List[dict]:
+        from sqlalchemy import select
+        from sqlalchemy.orm import object_session
+        session = object_session(self)
+        if not session:
+            return []
+        stmt = select(activity_dependencies).where(activity_dependencies.c.activity_id == self.id)
+        rows = session.execute(stmt).fetchall()
+        result = []
+        for r in rows:
+            result.append({
+                "predecessor_id": r.predecessor_activity_id,
+                "dependency_type": getattr(r, 'dependency_type', 'FS') or 'FS',
+                "lag": float(getattr(r, 'lag', 0.0) or 0.0)
+            })
+        return result
+
