@@ -12,10 +12,13 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="EventPath Scheduling Engine API",
     description=(
-        "A Critical Path Method (CPM) and Program Evaluation and Review Technique (PERT) "
-        "computational scheduling engine backend designed for event planning projects."
+        "An Explainable AI Framework for Intelligent Event Scheduling and Dynamic Risk "
+        "Optimization. Exposes a Critical Path Method (CPM) and Program Evaluation and "
+        "Review Technique (PERT) computational scheduling engine, plus an XAI explanation "
+        "layer that narrates bottlenecks, merge-path bias, crashing trade-offs and vendor "
+        "constraint conflicts with the evidence behind every claim."
     ),
-    version="1.0.0",
+    version="1.1.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -51,5 +54,9 @@ app.include_router(api_router, prefix="/api/v1")
 @app.get("/")
 def read_root():
     return {
-        "message": "Welcome to the EventPath Scheduling Engine API. Visit /docs for API documentation."
+        "message": (
+            "Welcome to the EventPath Scheduling Engine API. "
+            "An Explainable AI Framework for Intelligent Event Scheduling and Dynamic Risk Optimization. "
+            "Visit /docs for API documentation."
+        )
     }

@@ -13,9 +13,11 @@ import {
   Minus,
 } from "lucide-react";
 import { getProjects, getProjectNetwork } from "../services/projectService";
+import { getVendorRecommendations } from "../services/xaiService";
 import { updateActivity } from "../services/activityService";
 import ExportButtons from "../components/ExportButtons";
 import ActivityEditModal from "../components/ActivityEditModal";
+import XaiPanel from "../components/XaiPanel";
 
 
 function Schedule() {
@@ -219,6 +221,34 @@ function Schedule() {
       </section>
 
       {/* Summary Banner */}
+      {/* XAI: vendor conflict recommendations for the selected project */}
+      {selectedProjectId !== "ALL" && (
+        <section
+          className="analysis-panel"
+          style={{
+            background: "var(--bg-card)",
+            padding: "24px",
+            borderRadius: "12px",
+            border: "1px solid var(--border-color)",
+            boxShadow: "var(--shadow-md)",
+          }}
+        >
+          <span className="page-eyebrow">EXPLAINABLE AI</span>
+          <h2 style={{ margin: "6px 0 4px", fontSize: "1.15rem" }}>
+            Vendor conflict recommendations
+          </h2>
+          <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+            Each double-booking translated into the float shift that clears it
+            at no cost to the event date.
+          </p>
+
+          <XaiPanel
+            fetcher={getVendorRecommendations}
+            projectId={selectedProjectId}
+          />
+        </section>
+      )}
+
       <section className="dashboard-stats" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
         <div className="stat-card">
           <div className="stat-icon" style={{ background: "var(--accent-light)", color: "var(--accent)" }}>

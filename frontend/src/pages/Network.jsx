@@ -11,8 +11,10 @@ import "@xyflow/react/dist/style.css";
 import { RotateCcw, Move, Edit, LayoutGrid } from "lucide-react";
 
 import { getProjectNetwork } from "../services/projectService";
+import { getCriticalPathExplanation } from "../services/xaiService";
 import ExportButtons from "../components/ExportButtons";
 import ActivityEditModal from "../components/ActivityEditModal";
+import XaiPanel from "../components/XaiPanel";
 
 function Network() {
   const { projectId } = useParams();
@@ -404,6 +406,23 @@ function Network() {
             <p>No critical path detected.</p>
           )}
         </div>
+      </section>
+
+      {/* XAI: why the graph is shaped this way */}
+      <section className="critical-path-card">
+        <div>
+          <span className="page-eyebrow">EXPLAINABLE AI</span>
+          <h2>Why this is the critical path</h2>
+          <p>
+            Bottlenecks, near-critical routes and the float that can absorb a
+            delay without moving the event date.
+          </p>
+        </div>
+
+        <XaiPanel
+          fetcher={getCriticalPathExplanation}
+          projectId={projectId}
+        />
       </section>
 
       {/* Legend */}

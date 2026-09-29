@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -20,6 +20,7 @@ import {
 } from "recharts";
 
 import ExportButtons from "../components/ExportButtons";
+import XaiPanel from "../components/XaiPanel";
 
 import {
   getProject,
@@ -31,6 +32,13 @@ import {
   checkVendorAvailability,
 } from "../services/projectService";
 
+import {
+  getCriticalPathExplanation,
+  getRiskDiagnostics,
+  getCounterfactualCrashing,
+  getVendorRecommendations,
+} from "../services/xaiService";
+
 
 function ProjectAnalysis() {
   const { projectId } = useParams();
@@ -40,8 +48,24 @@ function ProjectAnalysis() {
   const [network, setNetwork] = useState(null);
   const [pert, setPert] = useState(null);
   const [availability, setAvailability] = useState(null);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // XAI explanation panels fetch their own reports so a slow Monte Carlo
+  // explanation never blocks the deterministic CPM view.
+  const [riskParams, setRiskParams] = useState(null);
+  const [crashParams, setCrashParams] = useState(null);
+
+  const fetchRiskExplanation = useCallback(
+    (id, params) => getRiskDiagnostics(id, params || {}),
+    []
+  );
+
+  const fetchCrashExplanation = useCallback(
+    (id, params) => getCounterfactualCrashing(id, params || {}),
+    []
+  );
 
   const [mcNumSimulations, setMcNumSimulations] = useState(1000);
   const [mcTargetTime, setMcTargetTime] = useState("");
@@ -197,6 +221,10 @@ const handleCrash = async () => {
     console.log("Crash result:", result);
 
     setCrashResult(result);
+
+    setCrashParams({
+      target_duration: Number(crashTargetDuration),
+    });
   } catch (err) {
     console.error("Crash error:", err);
 
@@ -220,10 +248,15 @@ const handleCrash = async () => {
         target_time: mcTargetTime ? Number(mcTargetTime) : null,
       };
 
-      const result = await runMonteCarlo(projectId, payload);
-      console.log("Monte Carlo result:", result);
-      setMcResult(result);
-    } catch (err) {
+    const result = await runMonteCarlo(projectId, payload);
+    console.log("Monte Carlo result:", result);
+    setMcResult(result);
+
+    setRiskParams({
+      num_simulations: payload.num_simulations,
+      target_time: payload.target_time,
+    });
+  } catch (err) {
       console.error("Monte Carlo error:", err);
       setMcError(
         err.response?.data?.detail ||
@@ -426,6 +459,30 @@ const availableTime =
 
       </section>
 
+      {/* XAI: why the critical path is what it is */}
+
+      <section className="analysis-panel">
+        <div className="analysis-panel-header">
+          <div>
+            <span className="analysis-eyebrow">
+              EXPLAINABLE AI
+            </span>
+
+            <h2>Critical Path Explanation</h2>
+
+            <p>
+              Why this path is critical, which float is
+              real contingency, and what to do first.
+            </p>
+          </div>
+        </div>
+
+        <XaiPanel
+          fetcher={getCriticalPathExplanation}
+          projectId={projectId}
+        />
+      </section>
+
 {/* PERT Analysis */}
 
 {project.mode === "PERT" && pert && (
@@ -492,6 +549,33 @@ const availableTime =
         </div>
       )}
 
+  </section>
+)}
+
+{/* XAI: probabilistic risk diagnostics */}
+
+{project.mode === "PERT" && (
+  <section className="analysis-panel">
+    <div className="analysis-panel-header">
+      <div>
+        <span className="analysis-eyebrow">
+          EXPLAINABLE AI
+        </span>
+
+        <h2>Probabilistic Risk Diagnostics</h2>
+
+        <p>
+          Completion probability, merge-path bias, hidden
+          criticality and a defensible commitment date.
+        </p>
+      </div>
+    </div>
+
+    <XaiPanel
+      fetcher={fetchRiskExplanation}
+      projectId={projectId}
+      params={riskParams}
+    />
   </section>
 )}
 
@@ -743,6 +827,11 @@ const availableTime =
 
   {availability ? (
     <div style={{ marginTop: "1rem" }}>
+      <XaiPanel
+        fetcher={getVendorRecommendations}
+        projectId={projectId}
+      />
+
       {availability.has_conflicts ? (
         <div style={{ padding: "16px", borderRadius: "12px", background: "#fef2f2", border: "1px solid #fecaca", marginBottom: "1.5rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#991b1b", fontWeight: 700, fontSize: "1.1rem" }}>
@@ -1029,6 +1118,12 @@ const availableTime =
             </p>
           </div>
         </div>
+
+        <XaiPanel
+          fetcher={fetchCrashExplanation}
+          projectId={projectId}
+          params={crashParams}
+        />
 
         <div className="crash-form">
 
