@@ -492,11 +492,19 @@ const [error, setError] = useState("");
               </button>
             </div>
 
-            <div style={{ display: "flex", gap: "12px", borderBottom: "1px solid #e2e8f0", marginBottom: "20px", paddingBottom: "10px" }}>
+            <div style={{ display: "flex", gap: "12px", borderBottom: "1px solid var(--border-color)", marginBottom: "20px", paddingBottom: "10px" }}>
               <button
                 type="button"
-                className={modalTab === "custom" ? "filter-active" : ""}
-                style={{ padding: "6px 16px", borderRadius: "8px", border: "none", cursor: "pointer", fontWeight: 600 }}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border-color)",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  fontSize: "0.85rem",
+                  background: modalTab === "custom" ? "var(--accent)" : "var(--bg-main)",
+                  color: modalTab === "custom" ? "#ffffff" : "var(--text-secondary)"
+                }}
                 onClick={() => setModalTab("custom")}
               >
                 Custom Blank Project
@@ -504,8 +512,16 @@ const [error, setError] = useState("");
 
               <button
                 type="button"
-                className={modalTab === "template" ? "filter-active" : ""}
-                style={{ padding: "6px 16px", borderRadius: "8px", border: "none", cursor: "pointer", fontWeight: 600 }}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border-color)",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  fontSize: "0.85rem",
+                  background: modalTab === "template" ? "var(--accent)" : "var(--bg-main)",
+                  color: modalTab === "template" ? "#ffffff" : "var(--text-secondary)"
+                }}
                 onClick={() => setModalTab("template")}
               >
                 ✨ Industry Domain Templates (Gap 4)
@@ -516,23 +532,23 @@ const [error, setError] = useState("");
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div
                   style={{
-                    border: "1px solid #e2e8f0",
+                    border: "1px solid var(--border-color)",
                     borderRadius: "12px",
                     padding: "16px",
-                    background: "#f8fafc",
+                    background: "var(--bg-main)",
                     display: "flex",
                     flexDirection: "column",
                     gap: "10px"
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <h3 style={{ margin: 0, fontSize: "1.05rem" }}>💒 Grand Wedding Ceremony & Reception</h3>
+                    <h3 style={{ margin: 0, fontSize: "1.05rem", color: "var(--text-primary)" }}>💒 Grand Wedding Ceremony & Reception</h3>
                     <span className="mode-badge mode-pert">PERT</span>
                   </div>
-                  <p style={{ margin: 0, fontSize: "0.875rem", color: "#64748b" }}>
+                  <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--text-secondary)" }}>
                     Pre-populated 9-activity DAG featuring venue booking, catering, invitations, floral decor, audio-visual, RSVP tracking, rehearsal, and reception.
                   </p>
-                  <div style={{ display: "flex", gap: "12px", fontSize: "0.8rem", color: "#475569" }}>
+                  <div style={{ display: "flex", gap: "12px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
                     <span>• 9 Predefined Activities</span>
                     <span>• Vendor Categories & Milestones</span>
                     <span>• Crashing Costs Included</span>
@@ -550,23 +566,23 @@ const [error, setError] = useState("");
 
                 <div
                   style={{
-                    border: "1px solid #e2e8f0",
+                    border: "1px solid var(--border-color)",
                     borderRadius: "12px",
                     padding: "16px",
-                    background: "#f8fafc",
+                    background: "var(--bg-main)",
                     display: "flex",
                     flexDirection: "column",
                     gap: "10px"
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <h3 style={{ margin: 0, fontSize: "1.05rem" }}>🏢 Annual Tech Conference & Expo</h3>
+                    <h3 style={{ margin: 0, fontSize: "1.05rem", color: "var(--text-primary)" }}>🏢 Annual Tech Conference & Expo</h3>
                     <span className="mode-badge mode-cpm">CPM</span>
                   </div>
-                  <p style={{ margin: 0, fontSize: "0.875rem", color: "#64748b" }}>
+                  <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--text-secondary)" }}>
                     Standard corporate conference workflow covering convention center booking, keynote speakers, sponsorship packages, stage rigging, and live streaming.
                   </p>
-                  <div style={{ display: "flex", gap: "12px", fontSize: "0.8rem", color: "#475569" }}>
+                  <div style={{ display: "flex", gap: "12px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
                     <span>• 6 Predefined Activities</span>
                     <span>• Stage & AV Media Vendors</span>
                     <span>• Cost-Time Crashing Ready</span>

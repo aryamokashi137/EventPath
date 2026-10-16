@@ -9,6 +9,7 @@ import {
 } from "../services/activityService";
 import { useAuth } from "../context/AuthContext";
 import ExportButtons from "../components/ExportButtons";
+import ActivityEditModal from "../components/ActivityEditModal";
 
 function ProjectDetails() {
 
@@ -21,8 +22,13 @@ function ProjectDetails() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // Edit Modal State
+  const [editingModalActivity, setEditingModalActivity] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   const [activityName, setActivityName] = useState("");
   const [duration, setDuration] = useState("");
+
   const [optimisticTime, setOptimisticTime] = useState("");
   const [mostLikelyTime, setMostLikelyTime] = useState("");
   const [pessimisticTime, setPessimisticTime] = useState("");
@@ -288,12 +294,13 @@ function ProjectDetails() {
 
   const handleDeleteActivity = async (activityId) => {
     if (!isAdmin) {
-      alert("Access Denied: Workspace Administrator privileges ('ADMIN' role) are required to delete activities.");
+      alert("Access Denied: You are currently in USER (Read-Only) mode. Please click the 'Role: USER' button in the top-right header to switch back to 'ADMIN' to edit or delete activities.");
       return;
     }
     const confirmed = window.confirm(
       "Are you sure you want to delete this activity?"
     );
+
 
     if (!confirmed) {
       return;
@@ -553,13 +560,13 @@ function ProjectDetails() {
           />
 
           {/* Gap 2: Crashing Parameters */}
-          <div style={{ marginTop: "12px", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "12px", background: "#f8fafc" }}>
-            <p style={{ fontWeight: 600, fontSize: "0.875rem", margin: "0 0 8px 0", color: "#334155" }}>
+          <div style={{ marginTop: "12px", border: "1px solid var(--border-color)", borderRadius: "8px", padding: "12px", background: "var(--bg-main)" }}>
+            <p style={{ fontWeight: 600, fontSize: "0.875rem", margin: "0 0 8px 0", color: "var(--text-primary)" }}>
               ⚡ Schedule Crashing & Costs (Gap 2)
             </p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
               <div>
-                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Crash Duration (days)</label>
+                <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Crash Duration (days)</label>
                 <input
                   type="number"
                   placeholder="Min duration"
@@ -570,7 +577,7 @@ function ProjectDetails() {
                 />
               </div>
               <div>
-                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Normal Cost (₹)</label>
+                <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Normal Cost (₹)</label>
                 <input
                   type="number"
                   placeholder="Cost"
@@ -580,7 +587,7 @@ function ProjectDetails() {
                 />
               </div>
               <div>
-                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Crash Cost (₹)</label>
+                <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Crash Cost (₹)</label>
                 <input
                   type="number"
                   placeholder="Max crash cost"
@@ -593,13 +600,13 @@ function ProjectDetails() {
           </div>
 
           {/* Gap 5: Vendor Availability */}
-          <div style={{ marginTop: "12px", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "12px", background: "#f8fafc" }}>
-            <p style={{ fontWeight: 600, fontSize: "0.875rem", margin: "0 0 8px 0", color: "#334155" }}>
+          <div style={{ marginTop: "12px", border: "1px solid var(--border-color)", borderRadius: "8px", padding: "12px", background: "var(--bg-main)" }}>
+            <p style={{ fontWeight: 600, fontSize: "0.875rem", margin: "0 0 8px 0", color: "var(--text-primary)" }}>
               🤝 Vendor Availability Window (Gap 5)
             </p>
             <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "8px" }}>
               <div>
-                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Vendor Name</label>
+                <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Vendor Name</label>
                 <input
                   type="text"
                   placeholder="e.g. Grand Palace Events"
@@ -608,7 +615,7 @@ function ProjectDetails() {
                 />
               </div>
               <div>
-                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Available From</label>
+                <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Available From</label>
                 <input
                   type="date"
                   value={vendorAvailableFrom}
@@ -616,7 +623,7 @@ function ProjectDetails() {
                 />
               </div>
               <div>
-                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Available To</label>
+                <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Available To</label>
                 <input
                   type="date"
                   value={vendorAvailableTo}
@@ -625,6 +632,7 @@ function ProjectDetails() {
               </div>
             </div>
           </div>
+
 
           {/* =========================
               PREDECESSOR ACTIVITIES
@@ -781,7 +789,7 @@ function ProjectDetails() {
 
                 <p>
                   Duration:{" "}
-                  {activity.duration} days
+                  {Number.isInteger(Number(activity.duration)) ? activity.duration : Number(activity.duration).toFixed(1)} days
                 </p>
 
                 <p>
@@ -805,15 +813,24 @@ function ProjectDetails() {
 
                 <div className="activity-actions">
 
-                  {/* Edit */}
+                  {/* Edit - Opens the interactive modal */}
                   <button
                     type="button"
-                    onClick={() =>
-                      handleEditActivity(
-                        activity
-                      )
-                    }
+                    onClick={() => {
+                      setEditingModalActivity(activity);
+                      setIsModalOpen(true);
+                    }}
                     disabled={saving}
+                    style={{
+                      cursor: "pointer",
+                      padding: "6px 14px",
+                      borderRadius: "6px",
+                      border: "1px solid var(--border-color)",
+                      background: "var(--bg-main)",
+                      color: "var(--text-primary)",
+                      fontWeight: 600,
+                      fontSize: "0.85rem",
+                    }}
                   >
                     Edit
                   </button>
@@ -827,6 +844,16 @@ function ProjectDetails() {
                       )
                     }
                     disabled={saving}
+                    style={{
+                      cursor: "pointer",
+                      padding: "6px 14px",
+                      borderRadius: "6px",
+                      border: "1px solid #fecaca",
+                      background: "rgba(239, 68, 68, 0.12)",
+                      color: "#ef4444",
+                      fontWeight: 600,
+                      fontSize: "0.85rem",
+                    }}
                   >
                     Delete
                   </button>
@@ -839,8 +866,24 @@ function ProjectDetails() {
         )}
       </section>
 
+      {/* Activity Edit Modal */}
+      <ActivityEditModal
+        projectId={projectId}
+        activity={editingModalActivity}
+        allActivities={activities}
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingModalActivity(null);
+        }}
+        onSaveSuccess={() => {
+          loadProject();
+        }}
+      />
+
     </div>
   );
 }
 
 export default ProjectDetails;
+

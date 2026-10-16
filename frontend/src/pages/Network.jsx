@@ -220,10 +220,10 @@ function Network() {
 
               {node.id !== "START" && node.id !== "END" && (
                 <>
-                  <span>Duration: {node.duration} days</span>
-                  <span>ES: {node.es} &nbsp; EF: {node.ef}</span>
-                  <span>LS: {node.ls} &nbsp; LF: {node.lf}</span>
-                  <span>Slack: {node.slack}</span>
+                  <span>Duration: {Math.round(Number(node.duration) || 0)} days</span>
+                  <span>ES: {Math.round(Number(node.es) || 0)} &nbsp; EF: {Math.round(Number(node.ef) || 0)}</span>
+                  <span>LS: {Math.round(Number(node.ls) || 0)} &nbsp; LF: {Math.round(Number(node.lf) || 0)}</span>
+                  <span>Slack: {Math.round(Number(node.slack) || 0)} days</span>
 
                   {isCritical && (
                     <span className="network-critical-label">
@@ -243,22 +243,23 @@ function Network() {
             node.id === "START" || node.id === "END"
               ? "2px solid #64748b"
               : isCritical
-              ? "2px solid #dc2626"
-              : "1px solid #cbd5e1",
+              ? "2px solid #ef4444"
+              : "1px solid var(--border-color)",
           background:
             node.id === "START" || node.id === "END"
-              ? "var(--bg-main, #f8fafc)"
+              ? "var(--bg-main)"
               : isCritical
-              ? "#fef2f2"
-              : "var(--bg-card, #ffffff)",
+              ? "rgba(239, 68, 68, 0.16)"
+              : "var(--bg-card)",
           color: "var(--text-primary)",
           boxShadow: isCritical
-            ? "0 6px 18px rgba(220, 38, 38, 0.18)"
+            ? "0 4px 18px rgba(239, 68, 68, 0.25)"
             : "0 4px 14px rgba(15, 23, 42, 0.08)",
         },
       };
     });
   }, [network, customPositions, autoPositions]);
+
 
   // =========================================
   // BUILD REACT FLOW EDGES (WITH DEPENDENCY LABELS)
@@ -366,8 +367,9 @@ function Network() {
       <section className="network-metrics">
         <div className="network-metric-card">
           <span>Project Duration</span>
-          <strong>{Number(projectDuration).toFixed(2)} days</strong>
+          <strong>{Math.round(Number(projectDuration) || 0)} days</strong>
         </div>
+
         <div className="network-metric-card">
           <span>Total Activities</span>
           <strong>{activityNodes.length}</strong>
@@ -465,7 +467,18 @@ function Network() {
           >
             <Background />
             <Controls />
-            <MiniMap />
+            <MiniMap
+              nodeColor={(n) => {
+                if (n.id === "START" || n.id === "END") return "#64748b";
+                return n.data?.isCritical ? "#ef4444" : "#6366f1";
+              }}
+              maskColor="rgba(11, 15, 25, 0.75)"
+              style={{
+                background: "var(--bg-card)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "8px"
+              }}
+            />
           </ReactFlow>
         </div>
       </section>
@@ -504,13 +517,15 @@ function Network() {
                       {node.is_critical && <span className="critical-badge">Critical</span>}
                     </div>
                   </td>
-                  <td>{node.duration} days</td>
-                  <td>{node.es}</td>
-                  <td>{node.ef}</td>
-                  <td>{node.ls}</td>
-                  <td>{node.lf}</td>
+                  <td>{Math.round(Number(node.duration) || 0)} days</td>
+                  <td>{Math.round(Number(node.es) || 0)}</td>
+                  <td>{Math.round(Number(node.ef) || 0)}</td>
+                  <td>{Math.round(Number(node.ls) || 0)}</td>
+                  <td>{Math.round(Number(node.lf) || 0)}</td>
                   <td>
-                    <span className={node.slack === 0 ? "slack-zero" : "slack-value"}>{node.slack}</span>
+                    <span className={Math.round(Number(node.slack) || 0) === 0 ? "slack-zero" : "slack-value"}>
+                      {Math.round(Number(node.slack) || 0)}
+                    </span>
                   </td>
                   <td>
                     {node.is_critical ? (
@@ -519,6 +534,7 @@ function Network() {
                       <span className="status-normal">Non-critical</span>
                     )}
                   </td>
+
                   <td>
                     <button
                       onClick={() => {
@@ -530,6 +546,7 @@ function Network() {
                         borderRadius: "6px",
                         border: "1px solid var(--border-color)",
                         background: "var(--bg-main)",
+                        color: "var(--text-primary)",
                         cursor: "pointer",
                         fontSize: "0.75rem",
                         fontWeight: 600,

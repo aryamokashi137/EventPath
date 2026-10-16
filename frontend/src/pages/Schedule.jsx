@@ -336,9 +336,7 @@ function Schedule() {
                   const startPct = ((act.es || 0) / maxDay) * 100;
                   const durationPct = (Math.max(act.duration || 1, 0.5) / maxDay) * 100;
                   const slackPct = ((act.slack || 0) / maxDay) * 100;
-                  const formattedDuration = Number.isInteger(Number(act.duration))
-                    ? `${Number(act.duration)}d`
-                    : `${Number(act.duration).toFixed(1)}d`;
+                  const formattedDuration = `${Math.round(Number(act.duration) || 0)}d`;
 
                   return (
                     <div
@@ -433,7 +431,7 @@ function Schedule() {
 
                       {/* ES -> EF */}
                       <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-                        {Number(act.es).toFixed(1)}d → {Number(act.ef).toFixed(1)}d
+                        {Math.round(Number(act.es) || 0)}d → {Math.round(Number(act.ef) || 0)}d
                       </div>
 
                       {/* Bar Visualization Track */}
@@ -465,7 +463,7 @@ function Schedule() {
                             zIndex: 2,
                             cursor: "pointer",
                           }}
-                          title={`Click to edit | Task: ${act.name} | ES: ${Number(act.es).toFixed(1)}d, EF: ${Number(act.ef).toFixed(1)}d`}
+                          title={`Click to edit | Task: ${act.name} | ES: ${Math.round(Number(act.es) || 0)}d, EF: ${Math.round(Number(act.ef) || 0)}d`}
                         >
                           {durationPct > 7 ? formattedDuration : ""}
                         </div>
@@ -483,10 +481,11 @@ function Schedule() {
                               border: "1px dashed var(--text-muted)",
                               zIndex: 1,
                             }}
-                            title={`Slack (Float): ${Number(act.slack).toFixed(1)} days`}
+                            title={`Slack (Float): ${Math.round(Number(act.slack) || 0)} days`}
                           />
                         )}
                       </div>
+
                     </div>
                   );
                 })}

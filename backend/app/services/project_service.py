@@ -308,23 +308,24 @@ def compute_network(db: Session, project_id: UUID) -> Dict:
     else:  # PERT
         nodes, critical_path, duration, _, _ = cpm_engine.calculate_pert(activities_data)
 
-    # Format nodes
+    # Format nodes with clean rounded whole days
     formatted_nodes = []
     for node_id, node in nodes.items():
         formatted_nodes.append({
             "id": node.id,
             "name": node.name,
-            "duration": node.duration,
-            "es": node.es,
-            "ef": node.ef,
-            "ls": node.ls,
-            "lf": node.lf,
-            "slack": node.slack,
-            "total_float": node.total_float,
-            "free_float": node.free_float,
-            "interfering_float": node.interfering_float,
+            "duration": round(node.duration),
+            "es": round(node.es),
+            "ef": round(node.ef),
+            "ls": round(node.ls),
+            "lf": round(node.lf),
+            "slack": round(node.slack),
+            "total_float": round(node.total_float),
+            "free_float": round(node.free_float),
+            "interfering_float": round(node.interfering_float),
             "is_critical": node.is_critical
         })
+
 
     # Format edges with dependency types (FS, SS, FF, SF) and lag
     edges = []

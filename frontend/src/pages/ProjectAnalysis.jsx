@@ -406,9 +406,10 @@ const availableTime =
           <div>
             <span>Project Duration</span>
             <strong>
-  {Number(projectDuration).toFixed(2)} days
+  {Math.round(Number(projectDuration) || 0)} days
 </strong>
           </div>
+
 
         </div>
 
@@ -526,7 +527,7 @@ const availableTime =
       <div className="pert-result-card">
         <span>Standard Deviation</span>
         <strong>
-          {Number(pertStandardDeviation).toFixed(2)} days
+          ±{Math.round(Number(pertStandardDeviation) || 0)} days
         </strong>
       </div>
 
@@ -537,12 +538,12 @@ const availableTime =
         <div className="pert-warning">
           The target completion date provides{" "}
           <strong>
-            {Number(availableTime).toFixed(2)} days
+            {Math.round(Number(availableTime) || 0)} days
           </strong>{" "}
           of available time, while the project is
           expected to require{" "}
           <strong>
-            {Number(pertExpectedDuration).toFixed(2)} days
+            {Math.round(Number(pertExpectedDuration) || 0)} days
           </strong>.
           This results in a very low probability of
           completing the project on time.
@@ -646,17 +647,17 @@ const availableTime =
       <div className="pert-results-grid">
         <div className="pert-result-card">
           <span>Mean Expected Duration</span>
-          <strong>{Number(mcResult.mean_duration).toFixed(2)} days</strong>
+          <strong>{Math.round(Number(mcResult.mean_duration) || 0)} days</strong>
         </div>
 
         <div className="pert-result-card">
           <span>Standard Deviation</span>
-          <strong>±{Number(mcResult.std_dev_duration).toFixed(2)} days</strong>
+          <strong>±{Math.round(Number(mcResult.std_dev_duration) || 0)} days</strong>
         </div>
 
         <div className="pert-result-card">
           <span>Duration Range</span>
-          <strong>{Number(mcResult.min_duration).toFixed(1)} – {Number(mcResult.max_duration).toFixed(1)} days</strong>
+          <strong>{Math.round(Number(mcResult.min_duration) || 0)} – {Math.round(Number(mcResult.max_duration) || 0)} days</strong>
         </div>
 
         {mcResult.empirical_probability !== null && (
@@ -672,23 +673,23 @@ const availableTime =
         <div className="pert-results-grid">
           <div className="pert-result-card">
             <span>P10 (Optimistic)</span>
-            <strong>{Number(mcResult.p10).toFixed(2)} days</strong>
+            <strong>{Math.round(Number(mcResult.p10) || 0)} days</strong>
           </div>
           <div className="pert-result-card">
             <span>P50 (Median)</span>
-            <strong>{Number(mcResult.p50).toFixed(2)} days</strong>
+            <strong>{Math.round(Number(mcResult.p50) || 0)} days</strong>
           </div>
           <div className="pert-result-card">
             <span>P80 (Likely)</span>
-            <strong>{Number(mcResult.p80).toFixed(2)} days</strong>
+            <strong>{Math.round(Number(mcResult.p80) || 0)} days</strong>
           </div>
           <div className="pert-result-card">
             <span>P90 (Conservative)</span>
-            <strong>{Number(mcResult.p90).toFixed(2)} days</strong>
+            <strong>{Math.round(Number(mcResult.p90) || 0)} days</strong>
           </div>
           <div className="pert-result-card">
             <span>P95 (Pessimistic)</span>
-            <strong>{Number(mcResult.p95).toFixed(2)} days</strong>
+            <strong>{Math.round(Number(mcResult.p95) || 0)} days</strong>
           </div>
         </div>
       </div>
@@ -697,10 +698,10 @@ const availableTime =
       {mcResult.s_curve && mcResult.s_curve.length > 0 && (
         <div style={{ marginTop: "2rem" }}>
           <p style={{ fontWeight: 600, marginBottom: "0.25rem" }}>Cumulative Probability S-Curve</p>
-          <p style={{ fontSize: "0.85rem", color: "#64748b", marginBottom: "1rem" }}>
+          <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "1rem" }}>
             Probability of project completion by target duration.
           </p>
-          <div style={{ width: "100%", height: 300, background: "#ffffff", padding: "16px", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+          <div style={{ width: "100%", height: 300, background: "var(--bg-card)", padding: "16px", borderRadius: "12px", border: "1px solid var(--border-color)" }}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={mcResult.s_curve}>
                 <defs>
@@ -709,20 +710,26 @@ const availableTime =
                     <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
                 <XAxis
                   dataKey="duration"
-                  tickFormatter={(val) => `${Number(val).toFixed(1)}d`}
-                  stroke="#94a3b8"
+                  tickFormatter={(val) => `${Math.round(Number(val) || 0)}d`}
+                  stroke="var(--text-muted)"
                 />
                 <YAxis
                   domain={[0, 100]}
                   tickFormatter={(val) => `${val}%`}
-                  stroke="#94a3b8"
+                  stroke="var(--text-muted)"
                 />
                 <Tooltip
+                  contentStyle={{
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border-color)",
+                    borderRadius: "8px",
+                    color: "var(--text-primary)",
+                  }}
                   formatter={(value) => [`${Number(value).toFixed(1)}%`, "Probability"]}
-                  labelFormatter={(label) => `Duration: ${Number(label).toFixed(2)} days`}
+                  labelFormatter={(label) => `Duration: ${Math.round(Number(label) || 0)} days`}
                 />
                 <Area
                   type="monotone"
@@ -812,7 +819,7 @@ const availableTime =
     <button
       type="button"
       className="analysis-back-button"
-      style={{ padding: "8px 16px", borderRadius: "8px", background: "#f1f5f9", cursor: "pointer" }}
+      style={{ padding: "8px 16px", borderRadius: "8px", background: "var(--bg-card)", border: "1px solid var(--border-color)", color: "var(--text-primary)", cursor: "pointer" }}
       onClick={async () => {
         setAvailabilityLoading(true);
         const report = await checkVendorAvailability(projectId).catch(() => null);
@@ -833,20 +840,20 @@ const availableTime =
       />
 
       {availability.has_conflicts ? (
-        <div style={{ padding: "16px", borderRadius: "12px", background: "#fef2f2", border: "1px solid #fecaca", marginBottom: "1.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#991b1b", fontWeight: 700, fontSize: "1.1rem" }}>
+        <div style={{ padding: "16px", borderRadius: "12px", background: "rgba(239, 68, 68, 0.12)", border: "1px solid rgba(239, 68, 68, 0.35)", marginBottom: "1.5rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#ef4444", fontWeight: 700, fontSize: "1.1rem" }}>
             <span>⚠️ {availability.total_conflicts} Vendor Schedule Conflict(s) Detected</span>
           </div>
-          <p style={{ margin: "4px 0 0 0", color: "#7f1d1d", fontSize: "0.9rem" }}>
+          <p style={{ margin: "4px 0 0 0", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
             The scheduling engine detected vendor availability date range violations or concurrent vendor double-bookings.
           </p>
         </div>
       ) : (
-        <div style={{ padding: "16px", borderRadius: "12px", background: "#f0fdf4", border: "1px solid #bbf7d0", marginBottom: "1.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#166534", fontWeight: 700, fontSize: "1.1rem" }}>
+        <div style={{ padding: "16px", borderRadius: "12px", background: "rgba(34, 197, 94, 0.12)", border: "1px solid rgba(34, 197, 94, 0.35)", marginBottom: "1.5rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#22c55e", fontWeight: 700, fontSize: "1.1rem" }}>
             <span>✅ All Vendor Constraints Satisfied</span>
           </div>
-          <p style={{ margin: "4px 0 0 0", color: "#14532d", fontSize: "0.9rem" }}>
+          <p style={{ margin: "4px 0 0 0", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
             No vendor date range violations or overlapping vendor double-bookings were found across the active schedule.
           </p>
         </div>
@@ -859,19 +866,19 @@ const availableTime =
             <div
               key={index}
               style={{
-                border: "1px solid #e2e8f0",
+                border: "1px solid var(--border-color)",
                 borderRadius: "12px",
                 padding: "16px",
-                background: "#ffffff",
+                background: "var(--bg-card)",
                 boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                <span className="critical-badge" style={{ background: conflict.conflict_type === "VENDOR_OVERBOOKING" ? "#7c3aed" : "#ef4444" }}>
+                <span className="critical-badge" style={{ background: conflict.conflict_type === "VENDOR_OVERBOOKING" ? "rgba(124, 58, 237, 0.2)" : "rgba(239, 68, 68, 0.18)", color: conflict.conflict_type === "VENDOR_OVERBOOKING" ? "#a78bfa" : "#ef4444" }}>
                   {conflict.conflict_type === "VENDOR_OVERBOOKING" ? "🤝 VENDOR OVERBOOKING" : "📅 AVAILABILITY WINDOW VIOLATION"}
                 </span>
-                <span style={{ fontSize: "0.85rem", color: "#64748b" }}>
-                  Available Float: <strong>{Number(conflict.total_float).toFixed(1)} days</strong>
+                <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                  Available Float: <strong>{Math.round(Number(conflict.total_float) || 0)} days</strong>
                 </span>
               </div>
 
@@ -879,7 +886,7 @@ const availableTime =
                 Activity: <strong>{conflict.activity_name}</strong> {conflict.vendor_name && `(Vendor: ${conflict.vendor_name})`}
               </h4>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "0.875rem", color: "#475569", marginBottom: "12px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "0.875rem", color: "var(--text-secondary)", marginBottom: "12px" }}>
                 <div>
                   <strong>Scheduled Dates:</strong> {conflict.scheduled_start} to {conflict.scheduled_finish}
                 </div>
@@ -894,7 +901,7 @@ const availableTime =
                 )}
               </div>
 
-              <div style={{ padding: "10px 12px", borderRadius: "8px", background: "#f8fafc", borderLeft: "4px solid #6366f1", fontSize: "0.875rem" }}>
+              <div style={{ padding: "10px 12px", borderRadius: "8px", background: "var(--bg-main)", borderLeft: "4px solid #6366f1", fontSize: "0.875rem", color: "var(--text-primary)" }}>
                 <strong>💡 Recommended Resolution:</strong> {conflict.resolution_recommendation}
               </div>
             </div>
@@ -1350,22 +1357,23 @@ const availableTime =
                     </td>
 
                     <td>
-  {Number(activity.duration).toFixed(2)} days
+  {Math.round(Number(activity.duration) || 0)} days
 </td>
 
-                    <td>{Number(activity.es).toFixed(2)}</td>
+                    <td>{Math.round(Number(activity.es) || 0)}</td>
 
                     <td>
-  {Number(activity.ef).toFixed(2)}
+  {Math.round(Number(activity.ef) || 0)}
 </td>
 
-                    <td>{Number(activity.ls).toFixed(2)}</td>
+                    <td>{Math.round(Number(activity.ls) || 0)}</td>
 
                     <td>
-  {Number(activity.lf).toFixed(2)}
+  {Math.round(Number(activity.lf) || 0)}
 </td>
 
-                    <td>{Number(activity.slack).toFixed(2)}</td>
+                    <td>{Math.round(Number(activity.slack) || 0)}</td>
+
 
                     <td>
 
