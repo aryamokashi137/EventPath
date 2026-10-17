@@ -303,29 +303,47 @@ def compute_network(db: Session, project_id: UUID) -> Dict:
     project = get_project_or_404(db, project_id)
     activities_data = _prepare_cpm_input_from_db(db, project_id)
     
+    is_pert = (project.mode == "PERT")
     if project.mode == "CPM":
         nodes, critical_path, duration = cpm_engine.calculate_cpm(activities_data)
     else:  # PERT
         nodes, critical_path, duration, _, _ = cpm_engine.calculate_pert(activities_data)
 
-    # Format nodes with clean rounded whole days
+    # Format nodes:
+    # CPM: solid integer whole days
+    # PERT: statistical three-point times (rounded to 3 decimals max, e.g. 7.667 or 7.666 days)
     formatted_nodes = []
     for node_id, node in nodes.items():
-        formatted_nodes.append({
-            "id": node.id,
-            "name": node.name,
-            "duration": round(node.duration),
-            "es": round(node.es),
-            "ef": round(node.ef),
-            "ls": round(node.ls),
-            "lf": round(node.lf),
-            "slack": round(node.slack),
-            "total_float": round(node.total_float),
-            "free_float": round(node.free_float),
-            "interfering_float": round(node.interfering_float),
-            "is_critical": node.is_critical
-        })
-
+        if is_pert:
+            formatted_nodes.append({
+                "id": node.id,
+                "name": node.name,
+                "duration": round(node.duration, 3) if node.duration is not None else 0.0,
+                "es": round(node.es, 3) if node.es is not None else 0.0,
+                "ef": round(node.ef, 3) if node.ef is not None else 0.0,
+                "ls": round(node.ls, 3) if node.ls is not None else 0.0,
+                "lf": round(node.lf, 3) if node.lf is not None else 0.0,
+                "slack": round(node.slack, 3) if node.slack is not None else 0.0,
+                "total_float": round(node.total_float, 3) if node.total_float is not None else 0.0,
+                "free_float": round(node.free_float, 3) if node.free_float is not None else 0.0,
+                "interfering_float": round(node.interfering_float, 3) if node.interfering_float is not None else 0.0,
+                "is_critical": node.is_critical
+            })
+        else:
+            formatted_nodes.append({
+                "id": node.id,
+                "name": node.name,
+                "duration": round(node.duration) if node.duration is not None else 0,
+                "es": round(node.es) if node.es is not None else 0,
+                "ef": round(node.ef) if node.ef is not None else 0,
+                "ls": round(node.ls) if node.ls is not None else 0,
+                "lf": round(node.lf) if node.lf is not None else 0,
+                "slack": round(node.slack) if node.slack is not None else 0,
+                "total_float": round(node.total_float) if node.total_float is not None else 0,
+                "free_float": round(node.free_float) if node.free_float is not None else 0,
+                "interfering_float": round(node.interfering_float) if node.interfering_float is not None else 0,
+                "is_critical": node.is_critical
+            })
 
     # Format edges with dependency types (FS, SS, FF, SF) and lag
     edges = []
@@ -347,14 +365,15 @@ def compute_network(db: Session, project_id: UUID) -> Dict:
                     "lag": 0.0
                 })
 
-
     # Convert critical path IDs to UUIDs (excluding virtual START and END)
     critical_path_uuids = [UUID(cid) for cid in critical_path]
 
     return {
         "nodes": formatted_nodes,
         "edges": edges,
-        "critical_path": critical_path_uuids
+        "critical_path": critical_path_uuids,
+        "mode": project.mode,
+        "duration": round(duration, 3) if is_pert else round(duration)
     }
 
 def compute_pert_analysis(db: Session, project_id: UUID) -> Dict:
@@ -379,8 +398,9 @@ def compute_pert_analysis(db: Session, project_id: UUID) -> Dict:
     )
 
     return {
-        "expected_project_duration": expected_duration,
-        "project_variance": variance,
+        "expected_project_duration": round(expected_duration, 3) if expected_duration is not None else None,
+        "project_variance": round(variance, 3) if variance is not None else None,
+        "standard_deviation": round(math.sqrt(variance), 3) if variance is not None else None,
         "probability": probability,
         "available_time": available_time,
         "target_completion_date": project.target_completion_date

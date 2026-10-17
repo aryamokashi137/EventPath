@@ -40,6 +40,19 @@ import {
 } from "../services/xaiService";
 
 
+const formatDays = (val, isPert = false) => {
+  const num = Number(val);
+  if (isNaN(num)) return "0";
+  if (!isPert) {
+    return Math.round(num).toString();
+  }
+  // PERT: show up to 3 decimals max, trim redundant trailing zeros
+  if (Math.abs(num - Math.round(num)) < 1e-4) {
+    return Math.round(num).toString();
+  }
+  return parseFloat(num.toFixed(3)).toString();
+};
+
 function ProjectAnalysis() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -406,8 +419,8 @@ const availableTime =
           <div>
             <span>Project Duration</span>
             <strong>
-  {Math.round(Number(projectDuration) || 0)} days
-</strong>
+              {formatDays(projectDuration, project?.mode === "PERT")} days
+            </strong>
           </div>
 
 
@@ -520,14 +533,14 @@ const availableTime =
       <div className="pert-result-card">
         <span>Project Variance</span>
         <strong>
-          {Number(pertVariance).toFixed(2)}
+          {Number(pertVariance).toFixed(3)}
         </strong>
       </div>
 
       <div className="pert-result-card">
         <span>Standard Deviation</span>
         <strong>
-          ±{Math.round(Number(pertStandardDeviation) || 0)} days
+          ±{parseFloat(Number(pertStandardDeviation).toFixed(3))} days
         </strong>
       </div>
 
@@ -538,12 +551,12 @@ const availableTime =
         <div className="pert-warning">
           The target completion date provides{" "}
           <strong>
-            {Math.round(Number(availableTime) || 0)} days
+            {formatDays(availableTime, true)} days
           </strong>{" "}
           of available time, while the project is
           expected to require{" "}
           <strong>
-            {Math.round(Number(pertExpectedDuration) || 0)} days
+            {formatDays(pertExpectedDuration, true)} days
           </strong>.
           This results in a very low probability of
           completing the project on time.
@@ -647,17 +660,17 @@ const availableTime =
       <div className="pert-results-grid">
         <div className="pert-result-card">
           <span>Mean Expected Duration</span>
-          <strong>{Math.round(Number(mcResult.mean_duration) || 0)} days</strong>
+          <strong>{parseFloat(Number(mcResult.mean_duration).toFixed(3))} days</strong>
         </div>
 
         <div className="pert-result-card">
           <span>Standard Deviation</span>
-          <strong>±{Math.round(Number(mcResult.std_dev_duration) || 0)} days</strong>
+          <strong>±{parseFloat(Number(mcResult.std_dev_duration).toFixed(3))} days</strong>
         </div>
 
         <div className="pert-result-card">
           <span>Duration Range</span>
-          <strong>{Math.round(Number(mcResult.min_duration) || 0)} – {Math.round(Number(mcResult.max_duration) || 0)} days</strong>
+          <strong>{parseFloat(Number(mcResult.min_duration).toFixed(2))} – {parseFloat(Number(mcResult.max_duration).toFixed(2))} days</strong>
         </div>
 
         {mcResult.empirical_probability !== null && (
@@ -673,23 +686,23 @@ const availableTime =
         <div className="pert-results-grid">
           <div className="pert-result-card">
             <span>P10 (Optimistic)</span>
-            <strong>{Math.round(Number(mcResult.p10) || 0)} days</strong>
+            <strong>{parseFloat(Number(mcResult.p10).toFixed(2))} days</strong>
           </div>
           <div className="pert-result-card">
             <span>P50 (Median)</span>
-            <strong>{Math.round(Number(mcResult.p50) || 0)} days</strong>
+            <strong>{parseFloat(Number(mcResult.p50).toFixed(2))} days</strong>
           </div>
           <div className="pert-result-card">
             <span>P80 (Likely)</span>
-            <strong>{Math.round(Number(mcResult.p80) || 0)} days</strong>
+            <strong>{parseFloat(Number(mcResult.p80).toFixed(2))} days</strong>
           </div>
           <div className="pert-result-card">
             <span>P90 (Conservative)</span>
-            <strong>{Math.round(Number(mcResult.p90) || 0)} days</strong>
+            <strong>{parseFloat(Number(mcResult.p90).toFixed(2))} days</strong>
           </div>
           <div className="pert-result-card">
             <span>P95 (Pessimistic)</span>
-            <strong>{Math.round(Number(mcResult.p95) || 0)} days</strong>
+            <strong>{parseFloat(Number(mcResult.p95).toFixed(2))} days</strong>
           </div>
         </div>
       </div>
@@ -1357,22 +1370,22 @@ const availableTime =
                     </td>
 
                     <td>
-  {Math.round(Number(activity.duration) || 0)} days
-</td>
+                      {formatDays(activity.duration, project?.mode === "PERT")} days
+                    </td>
 
-                    <td>{Math.round(Number(activity.es) || 0)}</td>
-
-                    <td>
-  {Math.round(Number(activity.ef) || 0)}
-</td>
-
-                    <td>{Math.round(Number(activity.ls) || 0)}</td>
+                    <td>{formatDays(activity.es, project?.mode === "PERT")}</td>
 
                     <td>
-  {Math.round(Number(activity.lf) || 0)}
-</td>
+                      {formatDays(activity.ef, project?.mode === "PERT")}
+                    </td>
 
-                    <td>{Math.round(Number(activity.slack) || 0)}</td>
+                    <td>{formatDays(activity.ls, project?.mode === "PERT")}</td>
+
+                    <td>
+                      {formatDays(activity.lf, project?.mode === "PERT")}
+                    </td>
+
+                    <td>{formatDays(activity.slack, project?.mode === "PERT")}</td>
 
 
                     <td>

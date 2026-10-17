@@ -16,6 +16,19 @@ import ExportButtons from "../components/ExportButtons";
 import ActivityEditModal from "../components/ActivityEditModal";
 import XaiPanel from "../components/XaiPanel";
 
+const formatDays = (val, isPert = false) => {
+  const num = Number(val);
+  if (isNaN(num)) return "0";
+  if (!isPert) {
+    return Math.round(num).toString();
+  }
+  // PERT: show up to 3 decimals max, trim redundant trailing zeros
+  if (Math.abs(num - Math.round(num)) < 1e-4) {
+    return Math.round(num).toString();
+  }
+  return parseFloat(num.toFixed(3)).toString();
+};
+
 function Network() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -176,6 +189,7 @@ function Network() {
   const flowNodes = useMemo(() => {
     if (!network?.nodes) return [];
 
+    const isPert = network?.mode === "PERT";
     return network.nodes.map((node) => {
       const isCritical = node.is_critical;
       const position = customPositions[node.id] || autoPositions[node.id] || { x: 100, y: 100 };
@@ -220,10 +234,10 @@ function Network() {
 
               {node.id !== "START" && node.id !== "END" && (
                 <>
-                  <span>Duration: {Math.round(Number(node.duration) || 0)} days</span>
-                  <span>ES: {Math.round(Number(node.es) || 0)} &nbsp; EF: {Math.round(Number(node.ef) || 0)}</span>
-                  <span>LS: {Math.round(Number(node.ls) || 0)} &nbsp; LF: {Math.round(Number(node.lf) || 0)}</span>
-                  <span>Slack: {Math.round(Number(node.slack) || 0)} days</span>
+                  <span>Duration: {formatDays(node.duration, isPert)} days</span>
+                  <span>ES: {formatDays(node.es, isPert)} &nbsp; EF: {formatDays(node.ef, isPert)}</span>
+                  <span>LS: {formatDays(node.ls, isPert)} &nbsp; LF: {formatDays(node.lf, isPert)}</span>
+                  <span>Slack: {formatDays(node.slack, isPert)} days</span>
 
                   {isCritical && (
                     <span className="network-critical-label">
@@ -367,7 +381,7 @@ function Network() {
       <section className="network-metrics">
         <div className="network-metric-card">
           <span>Project Duration</span>
-          <strong>{Math.round(Number(projectDuration) || 0)} days</strong>
+          <strong>{formatDays(projectDuration, network?.mode === "PERT")} days</strong>
         </div>
 
         <div className="network-metric-card">
@@ -517,14 +531,14 @@ function Network() {
                       {node.is_critical && <span className="critical-badge">Critical</span>}
                     </div>
                   </td>
-                  <td>{Math.round(Number(node.duration) || 0)} days</td>
-                  <td>{Math.round(Number(node.es) || 0)}</td>
-                  <td>{Math.round(Number(node.ef) || 0)}</td>
-                  <td>{Math.round(Number(node.ls) || 0)}</td>
-                  <td>{Math.round(Number(node.lf) || 0)}</td>
+                  <td>{formatDays(node.duration, network?.mode === "PERT")} days</td>
+                  <td>{formatDays(node.es, network?.mode === "PERT")}</td>
+                  <td>{formatDays(node.ef, network?.mode === "PERT")}</td>
+                  <td>{formatDays(node.ls, network?.mode === "PERT")}</td>
+                  <td>{formatDays(node.lf, network?.mode === "PERT")}</td>
                   <td>
-                    <span className={Math.round(Number(node.slack) || 0) === 0 ? "slack-zero" : "slack-value"}>
-                      {Math.round(Number(node.slack) || 0)}
+                    <span className={Math.abs(Number(node.slack) || 0) < 1e-4 ? "slack-zero" : "slack-value"}>
+                      {formatDays(node.slack, network?.mode === "PERT")}
                     </span>
                   </td>
                   <td>

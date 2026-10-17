@@ -9,12 +9,9 @@ import {
   Layers,
   Filter,
   Edit,
-  Plus,
-  Minus,
 } from "lucide-react";
 import { getProjects, getProjectNetwork } from "../services/projectService";
 import { getVendorRecommendations } from "../services/xaiService";
-import { updateActivity } from "../services/activityService";
 import ExportButtons from "../components/ExportButtons";
 import ActivityEditModal from "../components/ActivityEditModal";
 import XaiPanel from "../components/XaiPanel";
@@ -112,19 +109,6 @@ function Schedule() {
     loadScheduleData();
   }, [loadScheduleData]);
 
-  const handleQuickDurationChange = async (e, act, delta) => {
-    e.stopPropagation();
-    const newDuration = Math.max(0.5, (act.duration || 1) + delta);
-    try {
-      await updateActivity(act.projectId, act.id, {
-        name: act.name,
-        duration: newDuration,
-      });
-      loadScheduleData();
-    } catch (err) {
-      console.error("Quick duration change failed:", err);
-    }
-  };
 
   // Filter activities
   const filteredActivities = masterActivities.filter((act) => {
@@ -321,7 +305,7 @@ function Schedule() {
               {/* Gantt Header Days Axis */}
               <div style={{ display: "grid", gridTemplateColumns: "280px 130px 120px 1fr", gap: "16px", paddingBottom: "12px", borderBottom: "2px solid var(--border-color)", fontWeight: 700, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
                 <div>Activity & Project</div>
-                <div>Duration (Edit)</div>
+                <div>Duration</div>
                 <div>ES → EF</div>
                 <div style={{ display: "flex", justifyContent: "space-between", paddingLeft: "10px" }}>
                   <span>Day 0</span>
@@ -333,10 +317,15 @@ function Schedule() {
               {/* Gantt Activity Rows */}
               <div style={{ display: "flex", flexDirection: "column", gap: "12px", paddingTop: "12px" }}>
                 {filteredActivities.map((act) => {
+                  const isPert = act.projectMode === "PERT";
                   const startPct = ((act.es || 0) / maxDay) * 100;
                   const durationPct = (Math.max(act.duration || 1, 0.5) / maxDay) * 100;
                   const slackPct = ((act.slack || 0) / maxDay) * 100;
-                  const formattedDuration = `${Math.round(Number(act.duration) || 0)}d`;
+                  const formattedDuration = isPert
+                    ? (Math.abs(Number(act.duration) - Math.round(Number(act.duration))) < 1e-4
+                        ? `${Math.round(Number(act.duration))}d`
+                        : `${parseFloat(Number(act.duration).toFixed(3))}d`)
+                    : `${Math.round(Number(act.duration) || 0)}d`;
 
                   return (
                     <div
@@ -369,69 +358,41 @@ function Schedule() {
                         </div>
                       </div>
 
-                      {/* Interactive Duration & Edit Button */}
-                      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                        <button
-                          onClick={(e) => handleQuickDurationChange(e, act, -1)}
-                          title="Decrease duration by 1 day"
-                          style={{
-                            padding: "2px 4px",
-                            borderRadius: "4px",
-                            border: "1px solid var(--border-color)",
-                            background: "var(--bg-main)",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                          }}
-                        >
-                          <Minus size={12} />
-                        </button>
-                        <span style={{ fontSize: "0.85rem", fontWeight: 700, minWidth: "26px", textAlign: "center" }}>
+                      {/* Duration & Edit Button */}
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text-primary)" }}>
                           {formattedDuration}
                         </span>
-                        <button
-                          onClick={(e) => handleQuickDurationChange(e, act, 1)}
-                          title="Increase duration by 1 day"
-                          style={{
-                            padding: "2px 4px",
-                            borderRadius: "4px",
-                            border: "1px solid var(--border-color)",
-                            background: "var(--bg-main)",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                          }}
-                        >
-                          <Plus size={12} />
-                        </button>
                         <button
                           onClick={() => {
                             setEditingActivity(act);
                             setIsModalOpen(true);
                           }}
-                          title="Edit task details & dependencies"
+                          title="Edit task details & duration"
                           style={{
-                            padding: "3px 5px",
-                            borderRadius: "4px",
-                            border: "none",
+                            padding: "3px 6px",
+                            borderRadius: "5px",
+                            border: "1px solid var(--border-color)",
                             background: "rgba(99, 102, 241, 0.12)",
                             color: "var(--accent)",
                             cursor: "pointer",
                             display: "flex",
                             alignItems: "center",
-                            gap: "2px",
+                            gap: "3px",
                             fontSize: "0.75rem",
                             fontWeight: 600,
-                            marginLeft: "2px",
                           }}
                         >
-                          <Edit size={13} />
+                          <Edit size={12} />
+                          <span>Edit</span>
                         </button>
                       </div>
 
                       {/* ES -> EF */}
                       <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-                        {Math.round(Number(act.es) || 0)}d → {Math.round(Number(act.ef) || 0)}d
+                        {isPert
+                          ? `${parseFloat(Number(act.es).toFixed(2))}d → ${parseFloat(Number(act.ef).toFixed(2))}d`
+                          : `${Math.round(Number(act.es) || 0)}d → ${Math.round(Number(act.ef) || 0)}d`}
                       </div>
 
                       {/* Bar Visualization Track */}
@@ -463,7 +424,7 @@ function Schedule() {
                             zIndex: 2,
                             cursor: "pointer",
                           }}
-                          title={`Click to edit | Task: ${act.name} | ES: ${Math.round(Number(act.es) || 0)}d, EF: ${Math.round(Number(act.ef) || 0)}d`}
+                          title={`Click to edit | Task: ${act.name} | ES: ${isPert ? parseFloat(Number(act.es).toFixed(2)) : Math.round(Number(act.es) || 0)}d, EF: ${isPert ? parseFloat(Number(act.ef).toFixed(2)) : Math.round(Number(act.ef) || 0)}d`}
                         >
                           {durationPct > 7 ? formattedDuration : ""}
                         </div>

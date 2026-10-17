@@ -307,6 +307,12 @@ export default function ActivityEditModal({
                 />
               </div>
             </div>
+            {optimistic && mostLikely && pessimistic && Number(optimistic) > 0 && Number(mostLikely) > 0 && Number(pessimistic) > 0 && (
+              <div style={{ marginTop: "10px", fontSize: "0.78rem", color: "var(--accent)" }}>
+                Expected Statistical Duration (tₑ): <strong>{parseFloat(((Number(optimistic) + 4 * Number(mostLikely) + Number(pessimistic)) / 6).toFixed(3))} days</strong>
+                {" • "}Variance: <strong>{parseFloat((((Number(pessimistic) - Number(optimistic)) / 6) ** 2).toFixed(3))}</strong>
+              </div>
+            )}
           </div>
 
           {/* Activity Dependencies (FS, SS, FF, SF + Lag) */}

@@ -787,10 +787,25 @@ function ProjectDetails() {
                   {activity.name}
                 </h3>
 
-                <p>
-                  Duration:{" "}
-                  {Number.isInteger(Number(activity.duration)) ? activity.duration : Number(activity.duration).toFixed(1)} days
-                </p>
+                {project?.mode === "PERT" ? (
+                  <p>
+                    Expected Duration:{" "}
+                    <strong>
+                      {activity.optimistic_time !== null && activity.optimistic_time !== undefined && activity.most_likely_time !== null && activity.most_likely_time !== undefined && activity.pessimistic_time !== null && activity.pessimistic_time !== undefined
+                        ? parseFloat(((Number(activity.optimistic_time) + 4 * Number(activity.most_likely_time) + Number(activity.pessimistic_time)) / 6).toFixed(3))
+                        : (Number.isInteger(Number(activity.duration)) ? activity.duration : parseFloat(Number(activity.duration).toFixed(3)))} days
+                    </strong>{" "}
+                    {activity.optimistic_time !== null && activity.optimistic_time !== undefined && (
+                      <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                        (a: {activity.optimistic_time}d, m: {activity.most_likely_time}d, b: {activity.pessimistic_time}d)
+                      </span>
+                    )}
+                  </p>
+                ) : (
+                  <p>
+                    Duration: <strong>{Math.round(Number(activity.duration) || 0)} days</strong>
+                  </p>
+                )}
 
                 <p>
                   Category:{" "}
